@@ -27,6 +27,7 @@ async function main() {
     .option('--export-csv <filename>', 'Export results to CSV file')
     .option('--export-json <filename>', 'Export results to structured JSON file')
     .option('--subdomains', 'Enable subdomain discovery and enumeration')
+    .option('--check-pricing', 'Check domain availability and pricing across major registrars')
     .action(async (domains: string[], options) => {
       const inspector = new DomainInspector(options);
       

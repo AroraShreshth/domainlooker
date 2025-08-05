@@ -6,6 +6,7 @@ export interface DomainInfo {
   security?: SecurityData;
   network?: NetworkData;
   subdomains?: SubdomainData;
+  pricing?: DomainAvailabilityResult;
 }
 
 export interface SubdomainData {
@@ -81,6 +82,23 @@ export interface NetworkData {
   };
 }
 
+export interface DomainPricing {
+  provider: string;
+  available: boolean;
+  registrationPrice?: number;
+  renewalPrice?: number;
+  currency: string;
+  url: string;
+  error?: string;
+}
+
+export interface DomainAvailabilityResult {
+  domain: string;
+  isAvailable: boolean;
+  pricing: DomainPricing[];
+  checkedAt: Date;
+}
+
 export interface InspectionOptions {
   verbose?: boolean;
   quick?: boolean;
@@ -88,4 +106,5 @@ export interface InspectionOptions {
   exportCsv?: string;
   exportJson?: string;
   subdomains?: boolean;
+  checkPricing?: boolean;
 }

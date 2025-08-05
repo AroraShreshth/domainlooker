@@ -7,6 +7,7 @@ import { NetworkService } from './services/network.js';
 import { SubdomainService } from './services/subdomain.js';
 import { CSVExportService } from './services/csv-export.js';
 import { JsonExportService } from './services/json-export.js';
+import { DomainPricingService } from './services/domain-pricing.js';
 import { createSpinner, missionComplete, criticalAlert } from './ui/effects.js';
 import { DomainInfo, InspectionOptions } from './types/index.js';
 
@@ -16,6 +17,7 @@ export class DomainInspector {
   private sslService = new SSLService();
   private networkService = new NetworkService();
   private subdomainService = new SubdomainService();
+  private pricingService = new DomainPricingService();
   private csvExporter?: CSVExportService;
   private jsonExporter?: JsonExportService;
 
@@ -158,6 +160,7 @@ export class DomainInspector {
       const sslSpinner = createSpinner('Analyzing encryption protocols...');
       const networkSpinner = this.options.quick ? null : createSpinner('Conducting network reconnaissance...');
       const subdomainSpinner = this.options.subdomains ? createSpinner('Discovering subdomains...') : null;
+      const pricingSpinner = this.options.checkPricing ? createSpinner('Checking domain availability and pricing...') : null;
 
       // Start all spinners
       whoisSpinner.start();
@@ -165,6 +168,7 @@ export class DomainInspector {
       sslSpinner.start();
       if (networkSpinner) networkSpinner.start();
       if (subdomainSpinner) subdomainSpinner.start();
+      if (pricingSpinner) pricingSpinner.start();
 
       // Execute all intelligence gathering operations in parallel
       const intelligencePromises = [
@@ -172,7 +176,8 @@ export class DomainInspector {
         this.gatherDnsIntelligence(domain, dnsSpinner),
         this.gatherSslIntelligence(domain, sslSpinner),
         ...(this.options.quick ? [] : [this.gatherNetworkIntelligence(domain, networkSpinner!)]),
-        ...(this.options.subdomains ? [this.gatherSubdomainIntelligence(domain, subdomainSpinner!)] : [])
+        ...(this.options.subdomains ? [this.gatherSubdomainIntelligence(domain, subdomainSpinner!)] : []),
+        ...(this.options.checkPricing ? [this.gatherPricingIntelligence(domain, pricingSpinner!)] : [])
       ];
 
       const results = await Promise.allSettled(intelligencePromises);
@@ -195,6 +200,11 @@ export class DomainInspector {
       
       if (this.options.subdomains) {
         domainInfo.subdomains = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
+        resultIndex++;
+      }
+      
+      if (this.options.checkPricing) {
+        domainInfo.pricing = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
       }
 
       await this.generateIntelligenceReport(domainInfo);
@@ -369,6 +379,71 @@ export class DomainInspector {
       console.log();
     }
 
+    // Domain Pricing Intelligence
+    if (info.pricing) {
+      if (info.pricing.isAvailable) {
+        console.log(chalk.green.bold('💰 DOMAIN AVAILABILITY & PRICING'));
+        console.log(chalk.green(`🎯 Domain ${info.domain.toUpperCase()} appears to be AVAILABLE for registration!`));
+        console.log();
+
+        const validPricing = info.pricing.pricing.filter(p => p.available && !p.error);
+        
+        if (validPricing.length > 0) {
+          const pricingTable = new Table({
+            head: ['Provider', 'Registration', 'Renewal', 'Action'],
+            style: { head: ['green'] },
+            colWidths: [15, 12, 12, 30]
+          });
+
+          // Sort by registration price
+          const sortedPricing = validPricing.sort((a, b) => {
+            const priceA = a.registrationPrice || Infinity;
+            const priceB = b.registrationPrice || Infinity;
+            return priceA - priceB;
+          });
+
+          sortedPricing.forEach(pricing => {
+            const regPrice = pricing.registrationPrice ? `$${pricing.registrationPrice.toFixed(2)}` : 'N/A';
+            const renewPrice = pricing.renewalPrice ? `$${pricing.renewalPrice.toFixed(2)}` : 'N/A';
+            pricingTable.push([
+              pricing.provider,
+              regPrice,
+              renewPrice,
+              `🔗 ${pricing.url.substring(0, 25)}...`
+            ]);
+          });
+
+          console.log(pricingTable.toString());
+
+          // Show best deals
+          const cheapestReg = sortedPricing[0];
+          const cheapestRenewal = validPricing.sort((a, b) => 
+            (a.renewalPrice || Infinity) - (b.renewalPrice || Infinity)
+          )[0];
+
+          console.log(chalk.green.bold('\n🏆 BEST DEALS:'));
+          console.log(chalk.green(`💸 Cheapest Registration: ${cheapestReg.provider} - $${cheapestReg.registrationPrice?.toFixed(2)}`));
+          console.log(chalk.green(`🔄 Cheapest Renewal: ${cheapestRenewal.provider} - $${cheapestRenewal.renewalPrice?.toFixed(2)}`));
+        }
+
+        // Show any errors
+        const errorPricing = info.pricing.pricing.filter(p => p.error);
+        if (errorPricing.length > 0) {
+          console.log(chalk.yellow('\n⚠️  Some providers could not be checked:'));
+          errorPricing.forEach(p => {
+            console.log(chalk.yellow(`   ${p.provider}: ${p.error}`));
+          });
+        }
+
+        console.log();
+      } else {
+        console.log(chalk.yellow.bold('🔒 DOMAIN STATUS'));
+        console.log(chalk.yellow(`Domain ${info.domain.toUpperCase()} appears to be REGISTERED`));
+        console.log(chalk.dim('💡 Pricing information is only available for unregistered domains'));
+        console.log();
+      }
+    }
+
     // Threat Assessment
     this.displayThreatAssessment(info);
 
@@ -499,6 +574,25 @@ export class DomainInspector {
       return result;
     } catch (error) {
       spinner.fail(chalk.red('Subdomain discovery failed'));
+      if (this.options.verbose) {
+        console.log(chalk.red(`Error: ${error}`));
+      }
+      return null;
+    }
+  }
+
+  private async gatherPricingIntelligence(domain: string, spinner: any): Promise<any> {
+    try {
+      const result = await this.pricingService.checkAvailabilityAndPricing(domain);
+      if (result.isAvailable) {
+        const validPricing = result.pricing.filter(p => p.available && !p.error).length;
+        spinner.succeed(chalk.green(`Domain availability check complete (${validPricing} providers checked)`));
+      } else {
+        spinner.succeed(chalk.yellow('Domain appears to be registered - pricing not applicable'));
+      }
+      return result;
+    } catch (error) {
+      spinner.fail(chalk.red('Domain pricing check failed'));
       if (this.options.verbose) {
         console.log(chalk.red(`Error: ${error}`));
       }
