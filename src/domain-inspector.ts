@@ -8,6 +8,7 @@ import { SubdomainService } from './services/subdomain.js';
 import { CSVExportService } from './services/csv-export.js';
 import { JsonExportService } from './services/json-export.js';
 import { DomainPricingService } from './services/domain-pricing.js';
+import { PricingExportService } from './services/pricing-export.js';
 import { createSpinner, missionComplete, criticalAlert } from './ui/effects.js';
 import { DomainInfo, InspectionOptions } from './types/index.js';
 
@@ -20,6 +21,7 @@ export class DomainInspector {
   private pricingService = new DomainPricingService();
   private csvExporter?: CSVExportService;
   private jsonExporter?: JsonExportService;
+  private pricingExporter?: PricingExportService;
 
   constructor(private options: InspectionOptions = {}) {
     // Initialize CSV exporter if export option is provided
@@ -30,6 +32,11 @@ export class DomainInspector {
     // Initialize JSON exporter if export option is provided
     if (this.options.exportJson) {
       this.jsonExporter = new JsonExportService(this.options);
+    }
+
+    // Initialize specialized pricing exporter if pricing is enabled
+    if (this.options.checkPricing) {
+      this.pricingExporter = new PricingExportService();
     }
   }
 
@@ -73,6 +80,12 @@ export class DomainInspector {
     // Export to JSON if requested
     if (this.jsonExporter && this.options.exportJson) {
       await this.jsonExporter.exportToFile(this.options.exportJson);
+    }
+
+    // Export specialized pricing data if enabled
+    if (this.pricingExporter && this.pricingExporter.getDataCount() > 0) {
+      await this.pricingExporter.exportPricingCSV('multi_domain_pricing.csv');
+      await this.pricingExporter.exportPricingJSON('multi_domain_pricing.json');
     }
   }
 
@@ -140,6 +153,11 @@ export class DomainInspector {
       // Add to JSON export if enabled
       if (this.jsonExporter) {
         this.jsonExporter.addDomain(domainInfo);
+      }
+
+      // Add to specialized pricing exporter if enabled and pricing data exists
+      if (this.pricingExporter && domainInfo.pricing) {
+        this.pricingExporter.addDomain(domainInfo.pricing);
       }
 
     } catch (error) {
@@ -219,6 +237,16 @@ export class DomainInspector {
       if (this.jsonExporter) {
         this.jsonExporter.addDomain(domainInfo);
         await this.jsonExporter.exportToFile(this.options.exportJson!);
+      }
+
+      // Add to specialized pricing exporter and export
+      if (this.pricingExporter && domainInfo.pricing) {
+        this.pricingExporter.addDomain(domainInfo.pricing);
+        
+        // Export specialized pricing files
+        const baseName = domain.replace(/\./g, '_');
+        await this.pricingExporter.exportPricingCSV(`${baseName}_pricing.csv`);
+        await this.pricingExporter.exportPricingJSON(`${baseName}_pricing.json`);
       }
 
     } catch (error) {
@@ -390,9 +418,9 @@ export class DomainInspector {
         
         if (validPricing.length > 0) {
           const pricingTable = new Table({
-            head: ['Provider', 'Registration', 'Renewal', 'Action'],
+            head: ['Provider', 'Registration', 'Renewal', 'Data Source'],
             style: { head: ['green'] },
-            colWidths: [15, 12, 12, 30]
+            colWidths: [15, 12, 12, 20]
           });
 
           // Sort by registration price
@@ -405,15 +433,22 @@ export class DomainInspector {
           sortedPricing.forEach(pricing => {
             const regPrice = pricing.registrationPrice ? `$${pricing.registrationPrice.toFixed(2)}` : 'N/A';
             const renewPrice = pricing.renewalPrice ? `$${pricing.renewalPrice.toFixed(2)}` : 'N/A';
+            const dataSource = this.getDataSourceDisplay(pricing);
             pricingTable.push([
               pricing.provider,
               regPrice,
               renewPrice,
-              `🔗 ${pricing.url.substring(0, 25)}...`
+              dataSource
             ]);
           });
 
           console.log(pricingTable.toString());
+
+          // Show full registration URLs after the table
+          console.log(chalk.green.bold('\n🔗 REGISTRATION LINKS:'));
+          sortedPricing.forEach(pricing => {
+            console.log(chalk.green(`   ${pricing.provider}: ${pricing.url}`));
+          });
 
           // Show best deals
           const cheapestReg = sortedPricing[0];
@@ -598,6 +633,18 @@ export class DomainInspector {
       }
       return null;
     }
+  }
+
+  private getDataSourceDisplay(pricing: any): string {
+    if (pricing.error?.includes('Failed to get live pricing')) return '❌ Live API Failed';
+    if (pricing.error?.includes('web scraping')) return '🌐 Live Scraping';
+    if (pricing.error?.includes('fallback')) return '📊 Fallback';
+    if (pricing.provider === 'Porkbun' && !pricing.error) return '🔴 Live API';
+    if (pricing.provider === 'Cloudflare' && !pricing.error) return '🟡 3rd Party API';
+    if (pricing.provider === 'Namecheap' && !pricing.error) return '🌐 Live Scraping';
+    if (pricing.provider === 'GoDaddy' && !pricing.error) return '🌐 Live Scraping';
+    if (pricing.provider === 'Name.com' && !pricing.error) return '🔵 Live API';
+    return '🔴 Live Data';
   }
 
   private displayThreatAssessment(info: DomainInfo): void {

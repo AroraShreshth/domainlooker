@@ -29,6 +29,12 @@ export class CSVExportService {
       'Services',
       'Subdomains Found',
       'Sample Subdomains',
+      'Available for Registration',
+      'Cheapest Registration Price',
+      'Cheapest Renewal Price',
+      'Best Registration Provider',
+      'Best Renewal Provider',
+      'All Pricing Data',
       'Threat Level',
       'Threats'
     ].join(','));
@@ -41,7 +47,8 @@ export class CSVExportService {
       dns,
       ssl,
       network,
-      subdomains
+      subdomains,
+      pricing
     } = domainInfo;
 
     // Process arrays and objects for CSV format
@@ -55,6 +62,9 @@ export class CSVExportService {
     const status = whois?.status?.join('; ') || '';
     const subdomainCount = subdomains?.totalFound?.toString() || '0';
     const sampleSubdomains = subdomains?.subdomains?.slice(0, 5).join('; ') || '';
+
+    // Process pricing data
+    const pricingData = this.processPricingData(pricing);
 
     // Threat assessment
     const threats = this.assessThreats(domainInfo);
@@ -83,6 +93,12 @@ export class CSVExportService {
       this.escapeCSV(services),
       this.escapeCSV(subdomainCount),
       this.escapeCSV(sampleSubdomains),
+      this.escapeCSV(pricingData.isAvailable),
+      this.escapeCSV(pricingData.cheapestRegistration),
+      this.escapeCSV(pricingData.cheapestRenewal),
+      this.escapeCSV(pricingData.bestRegProvider),
+      this.escapeCSV(pricingData.bestRenewalProvider),
+      this.escapeCSV(pricingData.allPricing),
       this.escapeCSV(threatLevel),
       this.escapeCSV(threats.join('; '))
     ].join(',');
@@ -126,6 +142,63 @@ export class CSVExportService {
     if (threats.some(t => t.includes('Invalid SSL') || t.includes('No SSL'))) return 'HIGH';
     if (threats.some(t => t.includes('expires'))) return 'MEDIUM';
     return 'LOW';
+  }
+
+  private processPricingData(pricing?: any): {
+    isAvailable: string;
+    cheapestRegistration: string;
+    cheapestRenewal: string;
+    bestRegProvider: string;
+    bestRenewalProvider: string;
+    allPricing: string;
+  } {
+    if (!pricing) {
+      return {
+        isAvailable: 'Unknown',
+        cheapestRegistration: '',
+        cheapestRenewal: '',
+        bestRegProvider: '',
+        bestRenewalProvider: '',
+        allPricing: ''
+      };
+    }
+
+    const validPricing = pricing.pricing?.filter((p: any) => p.available && p.registrationPrice) || [];
+    
+    if (validPricing.length === 0) {
+      return {
+        isAvailable: pricing.isAvailable ? 'Yes' : 'No',
+        cheapestRegistration: '',
+        cheapestRenewal: '',
+        bestRegProvider: '',
+        bestRenewalProvider: '',
+        allPricing: ''
+      };
+    }
+
+    // Find cheapest registration
+    const cheapestReg = validPricing.reduce((prev: any, curr: any) => 
+      (curr.registrationPrice || Infinity) < (prev.registrationPrice || Infinity) ? curr : prev
+    );
+
+    // Find cheapest renewal
+    const cheapestRen = validPricing.reduce((prev: any, curr: any) => 
+      (curr.renewalPrice || Infinity) < (prev.renewalPrice || Infinity) ? curr : prev
+    );
+
+    // Format all pricing data
+    const allPricingText = validPricing.map((p: any) => 
+      `${p.provider}: Reg $${p.registrationPrice?.toFixed(2) || 'N/A'} / Ren $${p.renewalPrice?.toFixed(2) || 'N/A'}`
+    ).join(' | ');
+
+    return {
+      isAvailable: pricing.isAvailable ? 'Yes' : 'No',
+      cheapestRegistration: `$${cheapestReg.registrationPrice?.toFixed(2) || 'N/A'}`,
+      cheapestRenewal: `$${cheapestRen.renewalPrice?.toFixed(2) || 'N/A'}`,
+      bestRegProvider: cheapestReg.provider || '',
+      bestRenewalProvider: cheapestRen.provider || '',
+      allPricing: allPricingText
+    };
   }
 
   private escapeCSV(value: string): string {
