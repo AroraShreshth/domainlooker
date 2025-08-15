@@ -28,6 +28,7 @@ domainlooker example.com
 - **SSL Certificates** - Certificate validation and expiry monitoring
 - **Network Scanning** - Port discovery and service identification
 - **Subdomain Discovery** - Find subdomains using multiple techniques
+- **Domain Pricing** - Check availability and compare prices across major registrars
 - **Export Options** - Save results as CSV or JSON
 - **Threat Assessment** - Automated security risk evaluation
 - **Batch Processing** - Analyze multiple domains at once
@@ -58,6 +59,12 @@ domainlooker example.com --export-json report.json
 # Include subdomain discovery
 domainlooker example.com --subdomains
 
+# Check domain availability and pricing
+domainlooker unregistered-domain.com --check-pricing
+
+# Combine multiple features
+domainlooker example.com --subdomains --check-pricing --export-json results.json
+
 # Quick scan (skip network analysis)
 domainlooker example.com --quick
 
@@ -84,6 +91,7 @@ Options:
   --export-csv <file>    Export results to CSV file
   --export-json <file>   Export results to JSON file
   --subdomains          Enable subdomain discovery
+  --check-pricing       Check domain availability and pricing
   --no-banner           Skip the banner
   -h, --help            Display help
 ```
@@ -126,10 +134,33 @@ Options:
 ✅ No immediate threats detected
 ```
 
+## Domain Pricing & Availability
+
+When you discover an unregistered domain, DOMAINLOOKER can instantly check pricing across major registrars:
+
+```bash
+domainlooker my-awesome-startup.com --check-pricing
+```
+
+**Supported Registrars:**
+- 🌟 **Cloudflare** - At-cost pricing, no markup
+- 🥓 **Porkbun** - Often the cheapest option
+- 💎 **Namecheap** - Popular choice with competitive rates
+- 🚀 **GoDaddy** - World's largest registrar
+- 📧 **Name.com** - Clean interface and good support
+
+**Features:**
+- ✅ Instant availability detection
+- 💰 Real-time pricing comparison
+- 🏆 Best deal recommendations
+- 🔗 Direct links to register
+- 📊 Registration vs renewal cost analysis
+
 ## What You Get
 
 - **Complete Domain Profile** - Registration info, DNS records, SSL details
 - **Security Analysis** - Certificate validation, threat assessment, vulnerability detection
+- **Domain Pricing** - Availability checking and registrar price comparison
 - **Export Options** - CSV for spreadsheets, JSON for APIs and automation
 - **Subdomain Discovery** - Find hidden subdomains using multiple techniques
 - **Professional Reports** - Clean, organized output with threat indicators
@@ -137,9 +168,11 @@ Options:
 ## Use Cases
 
 - **Security Research** - Analyze domains for vulnerabilities and misconfigurations
+- **Domain Hunting** - Find and compare pricing for available domains
 - **Development** - Verify domain configurations and SSL certificate status
 - **System Administration** - Monitor domain health and expiration dates
 - **Competitive Analysis** - Compare domain setups and infrastructure
+- **Startup Planning** - Research domain availability and budget for registration costs
 - **Compliance** - Generate reports for security audits and documentation
 
 ## Requirements
