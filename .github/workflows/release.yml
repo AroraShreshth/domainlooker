@@ -86,13 +86,10 @@ jobs:
       run: |
         npm version ${{ inputs.version_type }} --no-git-tag-version
         echo "NEW_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
-        
-    - name: Update version in source files
-      if: github.event_name == 'workflow_dispatch'
-      run: |
-        # Update version in CLI
-        sed -i 's/\.version.*/.version('\''${{ env.NEW_VERSION }}'\'');/' src/index.ts
-        
+
+    # The CLI and MCP server read the version from package.json at runtime
+    # (src/version.ts), so bumping package.json is enough — no source edit needed.
+
     - name: Build for production
       run: npm run build
       

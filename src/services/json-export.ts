@@ -156,8 +156,9 @@ export class JsonExportService {
         validation: {
           isValid: ssl.isValid !== false,
           daysUntilExpiry: ssl.daysUntilExpiry || 0,
-          isExpired: ssl.daysUntilExpiry ? ssl.daysUntilExpiry <= 0 : false,
-          isSelfSigned: ssl.issuer?.includes('self-signed') || false
+          isExpired: typeof ssl.daysUntilExpiry === 'number' ? ssl.daysUntilExpiry <= 0 : false,
+          // A self-signed certificate has an identical issuer and subject.
+          isSelfSigned: !!ssl.issuer && !!ssl.subject && ssl.issuer === ssl.subject
         },
         security: {
           keySize: ssl.keySize,

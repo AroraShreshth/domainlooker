@@ -3,25 +3,17 @@
 import { Command } from 'commander';
 import { DomainInspector } from './domain-inspector.js';
 import { startStdioServer } from './mcp/server.js';
+import { isDomainShaped } from './core/target-guard.js';
 import { printError } from './ui/effects.js';
+import { VERSION } from './version.js';
 
 const program = new Command();
 
 program
   .name('domainlooker')
   .description('A fast CLI + MCP server for inspecting domains: WHOIS, DNS, SSL, ports, and subdomains.')
-  .version('0.2.0')
+  .version(VERSION)
   .showHelpAfterError('(run with --help for a list of commands)');
-
-/**
- * The default command has a variadic `<domains...>` argument, so a mistyped
- * subcommand (e.g. `sssl example.com`) would otherwise be silently treated as a
- * domain. Require every value to at least look like a hostname (a dot and only
- * host characters). This also accepts bare IPv4 addresses and a trailing-dot FQDN.
- */
-function looksLikeDomain(value: string): boolean {
-  return /^(?=.{1,254}$)([a-zA-Z0-9_-]+\.)+[a-zA-Z0-9_-]+\.?$/.test(value);
-}
 
 program
   .command('inspect', { isDefault: true })
@@ -34,7 +26,7 @@ program
   .option('--export-csv <file>', 'Write results to a CSV file')
   .option('--export-json <file>', 'Write results to a JSON file')
   .action(async (domains: string[], options) => {
-    const invalid = domains.filter(d => !looksLikeDomain(d));
+    const invalid = domains.filter(d => !isDomainShaped(d));
     if (invalid.length > 0) {
       printError(`not a valid domain: ${invalid.map(d => `'${d}'`).join(', ')}`);
       console.error("(run 'domainlooker --help' to see available commands)");

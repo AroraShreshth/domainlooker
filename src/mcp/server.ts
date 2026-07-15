@@ -2,11 +2,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { DomainCollector, CollectOptions } from '../core/collector.js';
+import { assertPublicDomain } from '../core/target-guard.js';
 import { JsonExportService } from '../services/json-export.js';
 import { DomainInfo } from '../types/index.js';
 import { DomainAnalysisData } from '../types/api-schema.js';
+import { VERSION } from '../version.js';
 
-const VERSION = '0.2.0';
 const CACHE_TTL_MS = 5 * 60 * 1000; // domain data changes slowly; 5 minutes keeps repeat calls instant
 const CACHE_MAX_ENTRIES = 500;
 
@@ -29,6 +30,14 @@ function textResult(value: unknown) {
 /** Render a granular lookup result, making "no data" explicit rather than a bare null. */
 function lookupResult(domain: string, value: unknown) {
   return textResult(value ?? { domain, found: false });
+}
+
+/** An MCP error result carrying a caller-safe message (e.g. a blocked target). */
+function guardError(error: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }],
+    isError: true,
+  };
 }
 
 export function createServer(): McpServer {
@@ -70,6 +79,12 @@ export function createServer(): McpServer {
       },
     },
     async ({ domain, includePorts, includeSubdomains }) => {
+      try {
+        await assertPublicDomain(domain);
+      } catch (error) {
+        return guardError(error);
+      }
+
       const options: CollectOptions = {
         quick: includePorts === false,
         subdomains: includeSubdomains === true,
@@ -89,35 +104,29 @@ export function createServer(): McpServer {
   );
 
   // Granular tools mirror the CLI subcommands, for agents that need just one aspect fast.
-  server.registerTool(
-    'whois_lookup',
-    { title: 'WHOIS lookup', description: 'Registration data (registrar, dates, name servers, status) via RDAP with WHOIS fallback.', inputSchema: { domain: domainArg } },
-    async ({ domain }) => lookupResult(domain, await collector.whois(domain)),
-  );
+  // Every tool runs the target through `assertPublicDomain` first, so an agent
+  // cannot turn the server into a scanner of internal/loopback/metadata hosts.
+  const granularTool = (
+    name: string,
+    title: string,
+    description: string,
+    run: (domain: string) => Promise<unknown>,
+  ) => {
+    server.registerTool(name, { title, description, inputSchema: { domain: domainArg } }, async ({ domain }) => {
+      try {
+        await assertPublicDomain(domain);
+      } catch (error) {
+        return guardError(error);
+      }
+      return lookupResult(domain, await run(domain));
+    });
+  };
 
-  server.registerTool(
-    'dns_records',
-    { title: 'DNS records', description: 'A, AAAA, MX, NS, TXT, and SOA records for a domain.', inputSchema: { domain: domainArg } },
-    async ({ domain }) => lookupResult(domain, await collector.dns(domain)),
-  );
-
-  server.registerTool(
-    'ssl_certificate',
-    { title: 'SSL certificate', description: 'TLS certificate details and days until expiry.', inputSchema: { domain: domainArg } },
-    async ({ domain }) => lookupResult(domain, await collector.ssl(domain)),
-  );
-
-  server.registerTool(
-    'scan_ports',
-    { title: 'Scan ports', description: 'Scan common TCP ports and identify the services behind the open ones.', inputSchema: { domain: domainArg } },
-    async ({ domain }) => lookupResult(domain, await collector.ports(domain)),
-  );
-
-  server.registerTool(
-    'find_subdomains',
-    { title: 'Find subdomains', description: 'Discover subdomains via certificate transparency and common-name checks.', inputSchema: { domain: domainArg } },
-    async ({ domain }) => lookupResult(domain, await collector.subdomains(domain)),
-  );
+  granularTool('whois_lookup', 'WHOIS lookup', 'Registration data (registrar, dates, name servers, status) via RDAP with WHOIS fallback.', d => collector.whois(d));
+  granularTool('dns_records', 'DNS records', 'A, AAAA, MX, NS, TXT, and SOA records for a domain.', d => collector.dns(d));
+  granularTool('ssl_certificate', 'SSL certificate', 'TLS certificate details and days until expiry.', d => collector.ssl(d));
+  granularTool('scan_ports', 'Scan ports', 'Scan common TCP ports and identify the services behind the open ones.', d => collector.ports(d));
+  granularTool('find_subdomains', 'Find subdomains', 'Discover subdomains via certificate transparency and common-name checks.', d => collector.subdomains(d));
 
   return server;
 }

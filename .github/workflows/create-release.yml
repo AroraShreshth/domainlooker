@@ -68,10 +68,9 @@ jobs:
           echo "NEW_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
         fi
         
-    - name: Update version in CLI
-      run: |
-        sed -i 's/\.version.*/.version('\''${{ env.NEW_VERSION }}'\'');/' src/index.ts
-        
+    # The CLI/MCP read the version from package.json at runtime (src/version.ts),
+    # so bumping package.json is enough — no source edit needed.
+
     - name: Run tests and validation
       run: |
         echo "🧪 Running comprehensive test suite..."

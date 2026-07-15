@@ -27,11 +27,33 @@ export interface CollectOptions {
 }
 
 export function hasWhoisData(whois: WhoisData | null | undefined): whois is WhoisData {
-  return !!whois && Object.keys(whois).length > 0;
+  // A parser can leave a key set to `undefined` (a matched label with no value),
+  // so require at least one field with an actual value — not merely a key.
+  return !!whois && Object.values(whois).some(v => v != null && (!Array.isArray(v) || v.length > 0));
 }
 
 export function hasDnsData(dns: DNSData | null | undefined): dns is DNSData {
-  return !!dns && Object.keys(dns).length > 0;
+  return !!dns && Object.values(dns).some(v => v != null && (!Array.isArray(v) || v.length > 0));
+}
+
+/** Lightweight, factual checks surfaced at the end of a report and in exports. */
+export function collectAdvisories(info: DomainInfo): string[] {
+  const advisories: string[] = [];
+
+  if (!info.ssl) {
+    advisories.push('No SSL certificate detected.');
+  } else if (info.ssl.daysUntilExpiry !== undefined && info.ssl.daysUntilExpiry < 30) {
+    advisories.push(`SSL certificate expires in ${info.ssl.daysUntilExpiry} days.`);
+  }
+
+  if (info.whois?.registrationDate) {
+    const days = (Date.now() - new Date(info.whois.registrationDate).getTime()) / 86_400_000;
+    if (days >= 0 && days < 30) {
+      advisories.push(`Domain was registered ${Math.round(days)} days ago.`);
+    }
+  }
+
+  return advisories;
 }
 
 /**

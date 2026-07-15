@@ -69,7 +69,7 @@ domainlooker example.com --export-csv report.csv --export-json report.json
 
 ## MCP server
 
-`domainlooker mcp` runs an [MCP](https://modelcontextprotocol.io) server over stdio so AI agents can pull domain intelligence directly. Results are cached for a few minutes, so repeat calls return instantly.
+`domainlooker mcp` runs an [MCP](https://modelcontextprotocol.io) server over stdio so AI agents can pull domain intelligence directly. `inspect_domain` results are cached for a few minutes, so repeat calls return instantly. Every tool refuses IP literals and hosts that resolve to private/loopback/link-local addresses, so an agent can't turn the server into an internal-network scanner.
 
 Register it with any MCP client. For example:
 

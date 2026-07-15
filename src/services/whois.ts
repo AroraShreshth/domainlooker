@@ -13,7 +13,7 @@ export interface WhoisLookupOptions {
 }
 
 /** RDAP that lacks these carries too little to prefer over a port-43 record. */
-function hasKeyRegistrationFields(whois: WhoisData): boolean {
+export function hasKeyRegistrationFields(whois: WhoisData): boolean {
   return !!(whois.registrar || whois.registrationDate || whois.expirationDate);
 }
 
@@ -51,60 +51,7 @@ export class WhoisService {
       timeout: timeoutMs,
       headers: { Accept: 'application/rdap+json', 'User-Agent': 'domainlooker' },
     });
-    return this.parseRdap(response.data);
-  }
-
-  private parseRdap(data: any): WhoisData {
-    const result: WhoisData = {};
-    if (!data || typeof data !== 'object') return result;
-
-    const entities: any[] = Array.isArray(data.entities) ? data.entities : [];
-
-    const registrar = entities.find(e => Array.isArray(e.roles) && e.roles.includes('registrar'));
-    if (registrar) {
-      const name = this.vcardValue(registrar, 'fn');
-      if (name) result.registrar = name;
-    }
-
-    const registrant = entities.find(e => Array.isArray(e.roles) && e.roles.includes('registrant'));
-    if (registrant) {
-      const country = this.vcardCountry(registrant);
-      if (country) result.registrantCountry = country;
-    }
-
-    const events: any[] = Array.isArray(data.events) ? data.events : [];
-    const registration = events.find(e => e.eventAction === 'registration');
-    const expiration = events.find(e => e.eventAction === 'expiration');
-    if (registration?.eventDate) result.registrationDate = registration.eventDate;
-    if (expiration?.eventDate) result.expirationDate = expiration.eventDate;
-
-    const nameServers = (Array.isArray(data.nameservers) ? data.nameservers : [])
-      .map((ns: any) => ns?.ldhName)
-      .filter((n: any): n is string => typeof n === 'string');
-    if (nameServers.length) result.nameServers = nameServers;
-
-    if (Array.isArray(data.status) && data.status.length) {
-      result.status = data.status.filter((s: any): s is string => typeof s === 'string');
-    }
-
-    return result;
-  }
-
-  /** Read a value from an RDAP jCard, e.g. `fn` (formatted name). */
-  private vcardValue(entity: any, key: string): string | undefined {
-    const properties = entity?.vcardArray?.[1];
-    if (!Array.isArray(properties)) return undefined;
-    const property = properties.find((p: any) => Array.isArray(p) && p[0] === key);
-    return property && property[3] != null ? String(property[3]) : undefined;
-  }
-
-  /** The country is the last component of a jCard `adr` structured value. */
-  private vcardCountry(entity: any): string | undefined {
-    const properties = entity?.vcardArray?.[1];
-    if (!Array.isArray(properties)) return undefined;
-    const adr = properties.find((p: any) => Array.isArray(p) && p[0] === 'adr');
-    const value = adr?.[3];
-    return Array.isArray(value) && value[6] ? String(value[6]) : undefined;
+    return parseRdapDomain(response.data);
   }
 
   private legacyLookup(domain: string, timeout: number): Promise<WhoisData> {
@@ -114,49 +61,99 @@ export class WhoisService {
           reject(err);
           return;
         }
-        resolve(this.parseWhoisData(data));
+        resolve(parseWhoisText(data));
       });
     });
   }
+}
 
-  private parseWhoisData(data: string): WhoisData {
-    const lines = data.split('\n');
-    const result: WhoisData = {};
+/** Parse an RDAP domain object into our WhoisData shape. Defensive against partial/redacted records. */
+export function parseRdapDomain(data: any): WhoisData {
+  const result: WhoisData = {};
+  if (!data || typeof data !== 'object') return result;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
+  const entities: any[] = Array.isArray(data.entities) ? data.entities : [];
 
-      if (trimmed.match(/registrar:/i)) {
-        result.registrar = this.extractValue(trimmed);
-      } else if (trimmed.match(/creation date|registered on|registration date:/i)) {
-        result.registrationDate = this.extractValue(trimmed);
-      } else if (trimmed.match(/expir|expiry date|expires on:/i)) {
-        result.expirationDate = this.extractValue(trimmed);
-      } else if (trimmed.match(/name server|nserver:/i)) {
-        if (!result.nameServers) result.nameServers = [];
-        const ns = this.extractValue(trimmed);
-        if (ns && !result.nameServers.includes(ns)) {
-          result.nameServers.push(ns);
-        }
-      } else if (trimmed.match(/registrant country:/i)) {
-        result.registrantCountry = this.extractValue(trimmed);
-      } else if (trimmed.match(/status:/i)) {
-        if (!result.status) result.status = [];
-        const status = this.extractValue(trimmed);
-        if (status && !result.status.includes(status)) {
-          result.status.push(status);
-        }
-      }
-    }
-
-    return result;
+  const registrar = entities.find(e => Array.isArray(e.roles) && e.roles.includes('registrar'));
+  if (registrar) {
+    const name = vcardValue(registrar, 'fn');
+    if (name) result.registrar = name;
   }
 
-  private extractValue(line: string): string | undefined {
-    const parts = line.split(':');
-    if (parts.length > 1) {
-      return parts.slice(1).join(':').trim();
-    }
-    return undefined;
+  const registrant = entities.find(e => Array.isArray(e.roles) && e.roles.includes('registrant'));
+  if (registrant) {
+    const country = vcardCountry(registrant);
+    if (country) result.registrantCountry = country;
   }
+
+  const events: any[] = Array.isArray(data.events) ? data.events : [];
+  const registration = events.find(e => e.eventAction === 'registration');
+  const expiration = events.find(e => e.eventAction === 'expiration');
+  if (registration?.eventDate) result.registrationDate = registration.eventDate;
+  if (expiration?.eventDate) result.expirationDate = expiration.eventDate;
+
+  const nameServers = (Array.isArray(data.nameservers) ? data.nameservers : [])
+    .map((ns: any) => ns?.ldhName)
+    .filter((n: any): n is string => typeof n === 'string');
+  if (nameServers.length) result.nameServers = nameServers;
+
+  if (Array.isArray(data.status) && data.status.length) {
+    const status = data.status.filter((s: any): s is string => typeof s === 'string');
+    if (status.length) result.status = status;
+  }
+
+  return result;
+}
+
+/**
+ * Parse raw port-43 WHOIS text. Matches the field label against the KEY (the
+ * text before the first colon) rather than the whole line, so disclaimer prose
+ * like "NOTICE: The expiration date displayed ..." is not mistaken for a value,
+ * and "Registrar WHOIS Server:" is not mistaken for the registrar.
+ */
+export function parseWhoisText(data: string): WhoisData {
+  const result: WhoisData = {};
+
+  for (const line of data.split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx <= 0) continue;
+    const key = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (!value) continue;
+
+    if (key === 'registrar' || key === 'sponsoring registrar') {
+      result.registrar = value;
+    } else if (key === 'creation date' || key === 'created' || key === 'created on' || key === 'registered on' || key === 'registration date') {
+      result.registrationDate ??= value;
+    } else if (/expir/.test(key) && /date/.test(key)) {
+      result.expirationDate ??= value;
+    } else if (key === 'name server' || key === 'nserver' || key === 'name servers') {
+      (result.nameServers ??= []);
+      if (!result.nameServers.includes(value)) result.nameServers.push(value);
+    } else if (key === 'registrant country') {
+      result.registrantCountry = value;
+    } else if (key === 'domain status' || key === 'status') {
+      (result.status ??= []);
+      if (!result.status.includes(value)) result.status.push(value);
+    }
+  }
+
+  return result;
+}
+
+/** Read a value from an RDAP jCard, e.g. `fn` (formatted name). */
+function vcardValue(entity: any, key: string): string | undefined {
+  const properties = entity?.vcardArray?.[1];
+  if (!Array.isArray(properties)) return undefined;
+  const property = properties.find((p: any) => Array.isArray(p) && p[0] === key);
+  return property && property[3] != null ? String(property[3]) : undefined;
+}
+
+/** The country is the last component of a jCard `adr` structured value. */
+function vcardCountry(entity: any): string | undefined {
+  const properties = entity?.vcardArray?.[1];
+  if (!Array.isArray(properties)) return undefined;
+  const adr = properties.find((p: any) => Array.isArray(p) && p[0] === 'adr');
+  const value = adr?.[3];
+  return Array.isArray(value) && value[6] ? String(value[6]) : undefined;
 }

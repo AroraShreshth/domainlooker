@@ -48,7 +48,11 @@ export class CSVExportService {
     const nameServers = whois?.nameServers?.join('; ') || '';
     const ipv4Addresses = dns?.a?.join('; ') || '';
     const ipv6Addresses = dns?.aaaa?.join('; ') || '';
-    const mxRecords = dns?.mx?.map(mx => `${mx.priority} ${mx.exchange}`).join('; ') || '';
+    // Skip "null MX" (RFC 7505) entries whose exchange is empty or ".".
+    const mxRecords = dns?.mx
+      ?.filter(mx => mx.exchange && mx.exchange !== '.')
+      .map(mx => `${mx.priority} ${mx.exchange}`)
+      .join('; ') || '';
     const txtRecords = dns?.txt?.slice(0, 3).join('; ') || ''; // Limit TXT records
     const openPorts = network?.openPorts?.join('; ') || '';
     const services = network?.services?.map(s => `${s.port}:${s.service}`).join('; ') || '';

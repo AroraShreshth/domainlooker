@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { CSVExportService } from './services/csv-export.js';
 import { JsonExportService } from './services/json-export.js';
-import { DomainCollector, CollectOptions, hasWhoisData, hasDnsData } from './core/collector.js';
+import { DomainCollector, CollectOptions, hasWhoisData, hasDnsData, collectAdvisories } from './core/collector.js';
 import { createSpinner, heading, domainHeading, printError } from './ui/effects.js';
 import {
   DomainInfo,
@@ -184,6 +184,7 @@ export class DomainInspector {
     if (mx.length) table.push(['MX', mx.map(m => `${m.priority} ${m.exchange}`).join('\n')]);
     if (dns.ns?.length) table.push(['NS', dns.ns.join('\n')]);
     if (dns.txt?.length) table.push(['TXT', dns.txt.slice(0, 5).join('\n')]);
+    if (dns.soa) table.push(['SOA', `${dns.soa.primary} (serial ${dns.soa.serial})`]);
     console.log(table.toString());
   }
 
@@ -253,24 +254,4 @@ export class DomainInspector {
       console.log(chalk.yellow(`- ${advisory}`));
     }
   }
-}
-
-/** Lightweight, factual checks surfaced at the end of a report. */
-export function collectAdvisories(info: DomainInfo): string[] {
-  const advisories: string[] = [];
-
-  if (!info.ssl) {
-    advisories.push('No SSL certificate detected.');
-  } else if (info.ssl.daysUntilExpiry !== undefined && info.ssl.daysUntilExpiry < 30) {
-    advisories.push(`SSL certificate expires in ${info.ssl.daysUntilExpiry} days.`);
-  }
-
-  if (info.whois?.registrationDate) {
-    const days = (Date.now() - new Date(info.whois.registrationDate).getTime()) / 86_400_000;
-    if (days >= 0 && days < 30) {
-      advisories.push(`Domain was registered ${Math.round(days)} days ago.`);
-    }
-  }
-
-  return advisories;
 }
