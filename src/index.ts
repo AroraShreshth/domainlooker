@@ -2,13 +2,14 @@
 
 import { Command } from 'commander';
 import { DomainInspector } from './domain-inspector.js';
+import { startStdioServer } from './mcp/server.js';
 import { printError } from './ui/effects.js';
 
 const program = new Command();
 
 program
   .name('domainlooker')
-  .description('A CLI suite for inspecting domains: WHOIS, DNS, SSL, ports, and subdomains.')
+  .description('A fast CLI + MCP server for inspecting domains: WHOIS, DNS, SSL, ports, and subdomains.')
   .version('0.2.0')
   .showHelpAfterError('(run with --help for a list of commands)');
 
@@ -76,6 +77,14 @@ for (const { name, description, run } of singleAspectCommands) {
       if (!found) process.exitCode = 1;
     });
 }
+
+program
+  .command('mcp')
+  .description('Run as an MCP server over stdio (for AI agents/clients)')
+  .action(async () => {
+    // stdout is reserved for the MCP protocol, so the process stays otherwise silent.
+    await startStdioServer();
+  });
 
 async function main(): Promise<void> {
   try {

@@ -5,6 +5,7 @@ import { WhoisService } from '../../src/services/whois';
 import { SSLService } from '../../src/services/ssl';
 import { NetworkService } from '../../src/services/network';
 import { SubdomainService } from '../../src/services/subdomain';
+import { DomainCollector, hasWhoisData, hasDnsData } from '../../src/core/collector';
 
 describe('Core Services Instantiation', () => {
   describe('Service Creation', () => {
@@ -41,6 +42,29 @@ describe('Core Services Instantiation', () => {
     it('should create SubdomainService', () => {
       const service = new SubdomainService();
       expect(service).toBeInstanceOf(SubdomainService);
+    });
+
+    it('should create DomainCollector with all lookup methods', () => {
+      const collector = new DomainCollector();
+      expect(collector).toBeInstanceOf(DomainCollector);
+      for (const method of ['collect', 'whois', 'dns', 'ssl', 'ports', 'subdomains'] as const) {
+        expect(typeof collector[method]).toBe('function');
+      }
+    });
+  });
+
+  describe('Collector predicates', () => {
+    it('hasWhoisData is false for empty/undefined, true for populated', () => {
+      expect(hasWhoisData(undefined)).toBe(false);
+      expect(hasWhoisData(null)).toBe(false);
+      expect(hasWhoisData({})).toBe(false);
+      expect(hasWhoisData({ registrar: 'X' })).toBe(true);
+    });
+
+    it('hasDnsData is false for empty/undefined, true for populated', () => {
+      expect(hasDnsData(undefined)).toBe(false);
+      expect(hasDnsData({})).toBe(false);
+      expect(hasDnsData({ a: ['1.2.3.4'] })).toBe(true);
     });
   });
 

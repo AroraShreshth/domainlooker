@@ -1,12 +1,8 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import { WhoisService } from './services/whois.js';
-import { DNSService } from './services/dns.js';
-import { SSLService } from './services/ssl.js';
-import { NetworkService } from './services/network.js';
-import { SubdomainService } from './services/subdomain.js';
 import { CSVExportService } from './services/csv-export.js';
 import { JsonExportService } from './services/json-export.js';
+import { DomainCollector, CollectOptions, hasWhoisData, hasDnsData } from './core/collector.js';
 import { createSpinner, heading, domainHeading, printError } from './ui/effects.js';
 import {
   DomainInfo,
@@ -19,11 +15,7 @@ import {
 } from './types/index.js';
 
 export class DomainInspector {
-  private whoisService = new WhoisService();
-  private dnsService = new DNSService();
-  private sslService = new SSLService();
-  private networkService = new NetworkService();
-  private subdomainService = new SubdomainService();
+  private collector = new DomainCollector();
   private csvExporter?: CSVExportService;
   private jsonExporter?: JsonExportService;
 
@@ -34,6 +26,14 @@ export class DomainInspector {
     if (this.options.exportJson) {
       this.jsonExporter = new JsonExportService(this.options);
     }
+  }
+
+  private collectOptions(): CollectOptions {
+    return {
+      quick: this.options.quick,
+      subdomains: this.options.subdomains,
+      onError: (_service, error) => this.logVerbose(error),
+    };
   }
 
   // --- Full multi-aspect report ----------------------------------------------
@@ -85,29 +85,10 @@ export class DomainInspector {
     }
   }
 
-  private async gather(domain: string): Promise<DomainInfo> {
-    const info: DomainInfo = { domain };
-
-    const tasks: Array<Promise<void>> = [
-      this.runWhois(domain).then(r => { info.whois = r ?? undefined; }),
-      this.runDns(domain).then(r => { info.dns = r ?? undefined; }),
-      this.runSsl(domain).then(r => { info.ssl = r ?? undefined; }),
-    ];
-    if (!this.options.quick) {
-      tasks.push(this.runNetwork(domain).then(r => { info.network = r ?? undefined; }));
-    }
-    if (this.options.subdomains) {
-      tasks.push(this.runSubdomains(domain).then(r => { info.subdomains = r ?? undefined; }));
-    }
-
-    await Promise.all(tasks);
-    return info;
-  }
-
   private renderReport(info: DomainInfo): void {
     domainHeading(info.domain);
-    if (hasWhoisData(info.whois)) this.renderWhois(info.whois!);
-    if (hasDnsData(info.dns)) this.renderDns(info.dns!);
+    if (hasWhoisData(info.whois)) this.renderWhois(info.whois);
+    if (hasDnsData(info.dns)) this.renderDns(info.dns);
     if (info.ssl) this.renderSsl(info.ssl);
     if (info.network?.openPorts?.length) this.renderPorts(info.network);
     if (info.subdomains && info.subdomains.totalFound > 0) this.renderSubdomains(info.subdomains);
@@ -115,97 +96,49 @@ export class DomainInspector {
   }
 
   // --- Single-aspect commands ------------------------------------------------
-
-  /** Each returns true when data was found and rendered, false otherwise. */
+  //
+  // Each runs one lookup under a single spinner (only one `ora` is ever live)
+  // and returns true when data was found and rendered, false otherwise.
 
   async whoisReport(domain: string): Promise<boolean> {
-    const data = await this.withSpinner(`WHOIS ${domain}`, () => this.runWhois(domain));
+    const data = await this.withSpinner(`WHOIS ${domain}`, () => this.collector.whois(domain, this.collectOptions()));
     if (hasWhoisData(data)) { this.renderWhois(data); return true; }
     console.log('No WHOIS data available.');
     return false;
   }
 
   async dnsReport(domain: string): Promise<boolean> {
-    const data = await this.withSpinner(`DNS ${domain}`, () => this.runDns(domain));
+    const data = await this.withSpinner(`DNS ${domain}`, () => this.collector.dns(domain, this.collectOptions()));
     if (hasDnsData(data)) { this.renderDns(data); return true; }
     console.log('No DNS records found.');
     return false;
   }
 
   async sslReport(domain: string): Promise<boolean> {
-    const data = await this.withSpinner(`SSL ${domain}`, () => this.runSsl(domain));
+    const data = await this.withSpinner(`SSL ${domain}`, () => this.collector.ssl(domain, this.collectOptions()));
     if (data) { this.renderSsl(data); return true; }
     console.log('No SSL certificate found.');
     return false;
   }
 
   async portsReport(domain: string): Promise<boolean> {
-    const data = await this.withSpinner(`Ports ${domain}`, () => this.runNetwork(domain));
+    const data = await this.withSpinner(`Ports ${domain}`, () => this.collector.ports(domain, this.collectOptions()));
     if (data?.openPorts?.length) { this.renderPorts(data); return true; }
     console.log('No open ports detected.');
     return false;
   }
 
   async subdomainReport(domain: string): Promise<boolean> {
-    const data = await this.withSpinner(`Subdomains ${domain}`, () => this.runSubdomains(domain));
+    const data = await this.withSpinner(`Subdomains ${domain}`, () => this.collector.subdomains(domain, this.collectOptions()));
     if (data && data.totalFound > 0) { this.renderSubdomains(data); return true; }
     console.log('No subdomains found.');
     return false;
   }
 
   // --- Data gathering --------------------------------------------------------
-  //
-  // The fetchers never start their own spinner: several run concurrently and
-  // `ora` cannot animate more than one line at a time, so a single spinner is
-  // owned by the calling command (`withSpinner`) instead. Each fetcher resolves
-  // to its data or `null`, never rejecting, so callers can use `Promise.all`.
 
-  private async runWhois(domain: string): Promise<WhoisData | null> {
-    try {
-      const result = await this.whoisService.lookup(domain);
-      // The lookup can succeed while the parser extracts nothing usable; treat
-      // that as "no data" so console, CSV, and JSON all agree.
-      return hasWhoisData(result) ? result : null;
-    } catch (error) {
-      this.logVerbose(error);
-      return null;
-    }
-  }
-
-  private async runDns(domain: string): Promise<DNSData | null> {
-    try {
-      return await this.dnsService.lookup(domain);
-    } catch (error) {
-      this.logVerbose(error);
-      return null;
-    }
-  }
-
-  private async runSsl(domain: string): Promise<SSLData | null> {
-    try {
-      return await this.sslService.getCertificate(domain);
-    } catch (error) {
-      this.logVerbose(error);
-      return null;
-    }
-  }
-
-  private async runNetwork(domain: string): Promise<NetworkData | null> {
-    try {
-      return await this.networkService.getNetworkInfo(domain);
-    } catch (error) {
-      this.logVerbose(error);
-      return null;
-    }
-  }
-
-  private async runSubdomains(domain: string): Promise<SubdomainData | null> {
-    try {
-      return await this.subdomainService.discoverSubdomains(domain);
-    } catch (error) {
-      this.logVerbose(error);
-      return null;
-    }
+  private gather(domain: string): Promise<DomainInfo> {
+    return this.collector.collect(domain, this.collectOptions());
   }
 
   /** Run `work` under a single spinner so concurrent lookups never fight for the TTY line. */
@@ -320,14 +253,6 @@ export class DomainInspector {
       console.log(chalk.yellow(`- ${advisory}`));
     }
   }
-}
-
-function hasWhoisData(whois: WhoisData | null | undefined): whois is WhoisData {
-  return !!whois && Object.keys(whois).length > 0;
-}
-
-function hasDnsData(dns: DNSData | null | undefined): dns is DNSData {
-  return !!dns && Object.keys(dns).length > 0;
 }
 
 /** Lightweight, factual checks surfaced at the end of a report. */

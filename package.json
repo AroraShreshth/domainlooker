@@ -1,7 +1,7 @@
 {
   "name": "domainlooker",
   "version": "0.2.0",
-  "description": "A CLI suite for inspecting domains: WHOIS, DNS, SSL, ports, subdomains, and CSV/JSON export.",
+  "description": "A fast CLI and MCP server for inspecting domains: WHOIS/RDAP, DNS, SSL, ports, subdomains, with CSV/JSON export.",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -20,12 +20,14 @@
     "prepublishOnly": "npm run build && npm run test:core"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.6.2",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
     "ora": "^8.0.1",
-    "whois": "^2.13.5"
+    "whois": "^2.13.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -38,9 +40,12 @@
   "keywords": [
     "domain",
     "whois",
+    "rdap",
     "dns",
     "ssl",
     "cli",
+    "mcp",
+    "model-context-protocol",
     "subdomain",
     "port-scanner",
     "domain-analysis",

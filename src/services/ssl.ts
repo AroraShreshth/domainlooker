@@ -2,8 +2,10 @@ import * as tls from 'tls';
 import * as crypto from 'crypto';
 import { SSLData } from '../types/index.js';
 
+const DEFAULT_TIMEOUT_MS = 5000;
+
 export class SSLService {
-  async getCertificate(domain: string, port: number = 443): Promise<SSLData> {
+  async getCertificate(domain: string, port: number = 443, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<SSLData> {
     return new Promise((resolve, reject) => {
       const options = {
         host: domain,
@@ -41,7 +43,7 @@ export class SSLService {
         reject(error);
       });
 
-      socket.setTimeout(10000, () => {
+      socket.setTimeout(timeoutMs, () => {
         socket.destroy();
         reject(new Error('SSL connection timeout'));
       });
