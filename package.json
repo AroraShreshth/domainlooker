@@ -1,7 +1,7 @@
 {
   "name": "domainlooker",
-  "version": "0.1.3",
-  "description": "🕵️ Mission-critical domain intelligence gathering tool with spy-themed interface. Comprehensive WHOIS, DNS, SSL, network analysis, subdomain discovery, and API-ready JSON exports.",
+  "version": "0.2.0",
+  "description": "A CLI suite for inspecting domains: WHOIS, DNS, SSL, ports, subdomains, and CSV/JSON export.",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -16,30 +16,20 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:core": "jest tests/unit/basic-functionality.test.ts tests/unit/dns-simple.test.ts",
-    "lint": "echo 'Linting...' && echo 'No linter configured - TypeScript compilation serves as basic validation'",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm run test:core"
   },
   "dependencies": {
     "axios": "^1.6.2",
-    "boxen": "^7.1.1",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
-    "figlet": "^1.7.0",
-    "gradient-string": "^2.0.2",
-    "inquirer": "^9.2.12",
-    "node-forge": "^1.3.1",
     "ora": "^8.0.1",
-    "uuid": "^9.0.1",
     "whois": "^2.13.5"
   },
   "devDependencies": {
-    "@types/figlet": "^1.5.8",
-    "@types/gradient-string": "^1.1.5",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.10.4",
-    "@types/uuid": "^9.0.7",
     "jest": "^29.7.0",
     "ts-jest": "^29.4.1",
     "tsx": "^4.6.2",
@@ -50,20 +40,14 @@
     "whois",
     "dns",
     "ssl",
-    "security",
     "cli",
-    "spy",
-    "intelligence",
-    "reconnaissance",
     "subdomain",
-    "network-scanner",
-    "cybersecurity",
+    "port-scanner",
     "domain-analysis",
-    "threat-assessment",
     "json-export",
     "csv-export"
   ],
-  "author": "Agent 007",
+  "author": "Shreshth Arora",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -74,7 +58,7 @@
     "url": "https://github.com/AroraShreshth/domainlooker/issues"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "files": [
     "dist/**/*",

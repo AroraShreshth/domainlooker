@@ -66,7 +66,7 @@ describe('CSVExportService', () => {
       
       expect(csvContent).toContain('Domain,Registrar,Registration Date');
       expect(csvContent).toContain('IPv4 Addresses,IPv6 Addresses');
-      expect(csvContent).toContain('SSL Issuer,SSL Expiry');
+      expect(csvContent).toContain('SSL Issuer,SSL Subject');
     });
 
     it('should include domain data in CSV format', async () => {
@@ -120,7 +120,8 @@ describe('CSVExportService', () => {
       const csvContent = writeCall[1];
       
       expect(csvContent).toContain('nonexistent-test-domain-12345.invalid');
-      expect(csvContent).toContain('N/A'); // Should show N/A for missing data
+      // Missing fields are rendered as empty CSV cells
+      expect(csvContent).toContain('nonexistent-test-domain-12345.invalid,,');
     });
 
     it('should format threat assessment correctly', async () => {

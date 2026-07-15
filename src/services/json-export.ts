@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { DomainInfo, InspectionOptions } from '../types/index.js';
 import { 
   DomainAnalysisResponse, 
@@ -19,7 +19,7 @@ import {
 export class JsonExportService {
   private domains: DomainAnalysisData[] = [];
   private startTime: number = Date.now();
-  private requestId: string = uuidv4();
+  private requestId: string = randomUUID();
   private options: InspectionOptions;
 
   constructor(options: InspectionOptions = {}) {
@@ -221,7 +221,6 @@ export class JsonExportService {
       total: subdomains.totalFound || 0,
       bySource: {
         'Certificate Transparency': subdomains.sources?.certificateTransparency?.length || 0,
-        'DNS Enumeration': subdomains.sources?.dnsEnumeration?.length || 0,
         'Common Names': subdomains.sources?.commonNames?.length || 0
       },
       patterns: this.analyzeSubdomainPatterns(subdomains.subdomains || []),
@@ -234,7 +233,6 @@ export class JsonExportService {
         subdomains: subdomains.subdomains || [],
         sources: {
           certificateTransparency: subdomains.sources?.certificateTransparency || [],
-          dnsEnumeration: subdomains.sources?.dnsEnumeration || [],
           commonNames: subdomains.sources?.commonNames || []
         },
         statistics
@@ -357,8 +355,7 @@ export class JsonExportService {
       network: domainInfo.network ? ['TCP Port Scan'] : [],
       subdomains: domainInfo.subdomains ? [
         ...(domainInfo.subdomains.sources.certificateTransparency.length > 0 ? ['Certificate Transparency (crt.sh)'] : []),
-        ...(domainInfo.subdomains.sources.commonNames.length > 0 ? ['Common Name Enumeration'] : []),
-        ...(domainInfo.subdomains.sources.dnsEnumeration.length > 0 ? ['DNS Enumeration'] : [])
+        ...(domainInfo.subdomains.sources.commonNames.length > 0 ? ['Common Name Enumeration'] : [])
       ] : [],
       threatIntelligence: ['Internal Analysis Engine']
     };
@@ -376,11 +373,9 @@ export class JsonExportService {
     
     try {
       await fs.promises.writeFile(fullPath, jsonContent, 'utf8');
-      console.log(`\n📄 JSON Export Complete: ${fullPath}`);
-      console.log(`🔍 Exported ${this.domains.length} domains with structured intelligence data`);
-      console.log(`📊 Schema version: ${response.meta.version} | Request ID: ${response.meta.requestId}`);
+      console.log(`\nJSON written to ${fullPath} (${this.domains.length} domain(s), schema v${response.meta.version})`);
     } catch (error) {
-      console.error(`❌ Failed to export JSON: ${error}`);
+      console.error(`Failed to write JSON: ${error}`);
       throw error;
     }
   }

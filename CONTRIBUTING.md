@@ -32,7 +32,6 @@ npm run dev         # Run in development mode
 npm run test        # Run all tests
 npm run test:core   # Run core functionality tests
 npm run test:watch  # Run tests in watch mode
-npm run lint        # Check code style
 npm run typecheck   # Type checking
 ```
 
@@ -161,4 +160,4 @@ Releases are automated through GitHub Actions:
 - Help others learn and grow
 - Follow the Golden Rule
 
-Thank you for contributing to DOMAINLOOKER! 🕵️‍♂️
+Thank you for contributing to domainlooker!

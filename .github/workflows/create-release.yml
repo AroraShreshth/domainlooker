@@ -81,39 +81,38 @@ jobs:
         
     - name: Generate changelog from commits
       run: |
-        echo "## 🚀 DOMAINLOOKER v${{ env.NEW_VERSION }}" > CHANGELOG.md
+        echo "## domainlooker v${{ env.NEW_VERSION }}" > CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "### 🎯 What's New" >> CHANGELOG.md
+        echo "### What's New" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        
+
         # Get the previous version tag
         PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
         if [ -n "$PREV_TAG" ]; then
-          echo "### 📋 Changes Since $PREV_TAG" >> CHANGELOG.md
+          echo "### Changes Since $PREV_TAG" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           git log $PREV_TAG..HEAD --pretty=format:"- %s" --no-merges >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
         fi
-        
-        echo "### ✨ Features" >> CHANGELOG.md
-        echo "- 🔍 **WHOIS Analysis** - Complete domain registration intelligence" >> CHANGELOG.md
-        echo "- 🌐 **DNS Investigation** - Comprehensive DNS record analysis (A, AAAA, MX, NS, TXT, SOA)" >> CHANGELOG.md
-        echo "- 🔒 **SSL Certificate Inspection** - Certificate validation and expiry monitoring" >> CHANGELOG.md
-        echo "- 🔥 **Network Scanning** - Port discovery and service identification" >> CHANGELOG.md
-        echo "- 🕸️ **Subdomain Discovery** - Advanced subdomain enumeration techniques" >> CHANGELOG.md
-        echo "- 📊 **Export Options** - CSV and JSON export with API-ready schemas" >> CHANGELOG.md
-        echo "- ⚠️ **Threat Assessment** - Automated security risk evaluation" >> CHANGELOG.md
-        echo "- 🎯 **Batch Processing** - Multiple domain analysis with parallel processing" >> CHANGELOG.md
+
+        echo "### Features" >> CHANGELOG.md
+        echo "- WHOIS registration lookup" >> CHANGELOG.md
+        echo "- DNS record analysis (A, AAAA, MX, NS, TXT, SOA)" >> CHANGELOG.md
+        echo "- SSL certificate validation and expiry monitoring" >> CHANGELOG.md
+        echo "- Port discovery and service identification" >> CHANGELOG.md
+        echo "- Subdomain discovery" >> CHANGELOG.md
+        echo "- CSV and JSON export" >> CHANGELOG.md
+        echo "- Batch processing with parallel lookups" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "### 📦 Installation" >> CHANGELOG.md
+        echo "### Installation" >> CHANGELOG.md
         echo "\`\`\`bash" >> CHANGELOG.md
         echo "npm install -g domainlooker@${{ env.NEW_VERSION }}" >> CHANGELOG.md
         echo "\`\`\`" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "### 🚀 Quick Start" >> CHANGELOG.md
+        echo "### Quick Start" >> CHANGELOG.md
         echo "\`\`\`bash" >> CHANGELOG.md
-        echo "# Single domain analysis" >> CHANGELOG.md
+        echo "# Inspect a single domain" >> CHANGELOG.md
         echo "domainlooker example.com" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
         echo "# Multiple domains with subdomain discovery" >> CHANGELOG.md
@@ -123,21 +122,18 @@ jobs:
         echo "domainlooker example.com --export-json report.json" >> CHANGELOG.md
         echo "\`\`\`" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "### 🔗 Links" >> CHANGELOG.md
-        echo "- 📖 [Documentation](https://github.com/${{ github.repository }}#readme)" >> CHANGELOG.md
-        echo "- 📦 [npm Package](https://www.npmjs.com/package/domainlooker)" >> CHANGELOG.md
-        echo "- 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)" >> CHANGELOG.md
-        echo "- 🤝 [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md)" >> CHANGELOG.md
+        echo "### Links" >> CHANGELOG.md
+        echo "- [Documentation](https://github.com/${{ github.repository }}#readme)" >> CHANGELOG.md
+        echo "- [npm Package](https://www.npmjs.com/package/domainlooker)" >> CHANGELOG.md
+        echo "- [Report Issues](https://github.com/${{ github.repository }}/issues)" >> CHANGELOG.md
+        echo "- [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md)" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "### 🛠️ Requirements" >> CHANGELOG.md
-        echo "- Node.js 16.0.0 or higher" >> CHANGELOG.md
+        echo "### Requirements" >> CHANGELOG.md
+        echo "- Node.js 18.0.0 or higher" >> CHANGELOG.md
         echo "- Internet connection for domain lookups" >> CHANGELOG.md
         echo "" >> CHANGELOG.md
-        echo "### 🔄 Full Changelog" >> CHANGELOG.md
+        echo "### Full Changelog" >> CHANGELOG.md
         echo "View all changes: https://github.com/${{ github.repository }}/compare/$PREV_TAG...v${{ env.NEW_VERSION }}" >> CHANGELOG.md
-        echo "" >> CHANGELOG.md
-        echo "---" >> CHANGELOG.md
-        echo "**Made with ❤️ for the cybersecurity and developer community**" >> CHANGELOG.md
         
     - name: Create package tarball
       run: |
@@ -167,7 +163,7 @@ jobs:
         fi
         
         gh release create "v${{ env.NEW_VERSION }}" \
-          --title "🕵️ DOMAINLOOKER v${{ env.NEW_VERSION }}" \
+          --title "domainlooker v${{ env.NEW_VERSION }}" \
           --notes-file CHANGELOG.md \
           --latest \
           $RELEASE_FLAGS \

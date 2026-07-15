@@ -1,10 +1,8 @@
-// Standardized API schema for DOMAINLOOKER
-// This schema is designed to be API-ready for future REST/GraphQL endpoints
+// Structured schema for the JSON export produced by `domainlooker --export-json`.
 
 export interface DomainAnalysisResponse {
   meta: ResponseMetadata;
   data: DomainAnalysisData[];
-  errors?: ApiError[];
 }
 
 export interface ResponseMetadata {
@@ -29,17 +27,17 @@ export interface DomainAnalysisData {
   timestamp: string;
   executionTimeMs: number;
   
-  // Core intelligence data
+  // Per-source results
   whois: WhoisAnalysis | null;
   dns: DnsAnalysis | null;
   ssl: SslAnalysis | null;
   network: NetworkAnalysis | null;
   subdomains: SubdomainAnalysis | null;
-  
-  // Risk assessment
+
+  // Rule-based checks
   threatAssessment: ThreatAssessment;
-  
-  // Data collection metadata
+
+  // Which method produced each block
   sources: DataSources;
 }
 
@@ -145,7 +143,6 @@ export interface SubdomainAnalysis {
     subdomains: string[];
     sources: {
       certificateTransparency: string[];
-      dnsEnumeration: string[];
       commonNames: string[];
     };
     statistics: {
@@ -171,7 +168,7 @@ export interface ThreatAssessment {
 }
 
 export interface ThreatIndicator {
-  type: 'ssl_expiry' | 'missing_ssl' | 'recent_registration' | 'suspicious_subdomain' | 'open_ports' | 'malware_detected';
+  type: 'ssl_expiry' | 'missing_ssl' | 'recent_registration' | 'open_ports';
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
   title: string;
   description: string;
@@ -186,52 +183,4 @@ export interface DataSources {
   network: string[];
   subdomains: string[];
   threatIntelligence: string[];
-}
-
-export interface ApiError {
-  code: string;
-  message: string;
-  domain?: string;
-  timestamp: string;
-  details?: any;
-}
-
-// Utility types for API responses
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: ApiError;
-  meta?: ResponseMetadata;
-}
-
-export interface PaginatedResponse<T = any> extends ApiResponse<T[]> {
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-}
-
-// Future API endpoint interfaces
-export interface AnalysisRequest {
-  domains: string[];
-  options?: Partial<AnalysisOptions>;
-  webhook?: {
-    url: string;
-    headers?: { [key: string]: string };
-  };
-}
-
-export interface AnalysisJobStatus {
-  jobId: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  progress: {
-    completed: number;
-    total: number;
-    percentage: number;
-  };
-  estimatedCompletion?: string;
-  results?: DomainAnalysisResponse;
 }

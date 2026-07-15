@@ -7,8 +7,16 @@ import { NetworkService } from './services/network.js';
 import { SubdomainService } from './services/subdomain.js';
 import { CSVExportService } from './services/csv-export.js';
 import { JsonExportService } from './services/json-export.js';
-import { createSpinner, missionComplete, criticalAlert } from './ui/effects.js';
-import { DomainInfo, InspectionOptions } from './types/index.js';
+import { createSpinner, heading, domainHeading, printError } from './ui/effects.js';
+import {
+  DomainInfo,
+  InspectionOptions,
+  WhoisData,
+  DNSData,
+  SSLData,
+  NetworkData,
+  SubdomainData,
+} from './types/index.js';
 
 export class DomainInspector {
   private whoisService = new WhoisService();
@@ -20,532 +28,324 @@ export class DomainInspector {
   private jsonExporter?: JsonExportService;
 
   constructor(private options: InspectionOptions = {}) {
-    // Initialize CSV exporter if export option is provided
     if (this.options.exportCsv) {
       this.csvExporter = new CSVExportService();
     }
-    
-    // Initialize JSON exporter if export option is provided
     if (this.options.exportJson) {
       this.jsonExporter = new JsonExportService(this.options);
     }
   }
 
-  async investigateMultiple(domains: string[], parallelLimit: number = 3): Promise<void> {
-    console.log(chalk.magenta.bold('\n' + '█'.repeat(80)));
-    console.log(chalk.magenta.bold(`🎯 MULTIPLE TARGETS ACQUIRED: ${domains.length} DOMAINS`));
-    console.log(chalk.magenta.bold(`📡 Processing ${parallelLimit} domains in parallel`));
-    console.log(chalk.magenta.bold('█'.repeat(80)));
+  // --- Full multi-aspect report ----------------------------------------------
 
-    // Process domains in batches
+  async inspect(domain: string): Promise<void> {
+    const info = await this.withSpinner(`Inspecting ${domain}`, () => this.gather(domain));
+    this.renderReport(info);
+
+    if (this.csvExporter && this.options.exportCsv) {
+      this.csvExporter.addDomain(info);
+      await this.csvExporter.exportToFile(this.options.exportCsv);
+    }
+    if (this.jsonExporter && this.options.exportJson) {
+      this.jsonExporter.addDomain(info);
+      await this.jsonExporter.exportToFile(this.options.exportJson);
+    }
+  }
+
+  async inspectMany(domains: string[], parallelLimit: number = 3): Promise<void> {
+    console.log(chalk.bold(`\nInspecting ${domains.length} domains (${parallelLimit} in parallel)`));
+
     for (let i = 0; i < domains.length; i += parallelLimit) {
       const batch = domains.slice(i, i + parallelLimit);
-      const batchNum = Math.floor(i / parallelLimit) + 1;
-      const totalBatches = Math.ceil(domains.length / parallelLimit);
-      
-      console.log(chalk.cyan.bold(`\n🔄 BATCH ${batchNum}/${totalBatches}: ${batch.join(' • ')}`));
-      
-      // Process current batch in parallel
-      const batchPromises = batch.map(domain => this.investigateSingle(domain));
-      await Promise.allSettled(batchPromises);
-      
-      // Add separator between batches (except for last batch)
-      if (i + parallelLimit < domains.length) {
-        console.log('\n' + chalk.magenta('█'.repeat(80)));
-        console.log(chalk.yellow.bold('⏳ PREPARING NEXT BATCH...'));
-        console.log(chalk.magenta('█'.repeat(80)));
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Brief pause between batches
+      const settled = await this.withSpinner(
+        `Inspecting ${batch.join(', ')}`,
+        () => Promise.allSettled(batch.map(domain => this.gather(domain))),
+      );
+
+      for (let j = 0; j < settled.length; j++) {
+        const outcome = settled[j];
+        if (outcome.status === 'rejected') {
+          // gather() is written never to reject; guard defensively so one bad
+          // domain can never drop the rest of the batch.
+          printError(`Failed to inspect ${batch[j]}: ${outcome.reason}`);
+          continue;
+        }
+        const info = outcome.value;
+        this.renderReport(info);
+        this.csvExporter?.addDomain(info);
+        this.jsonExporter?.addDomain(info);
       }
     }
 
-    // Final completion summary
-    console.log('\n' + chalk.green.bold('█'.repeat(80)));
-    console.log(chalk.green.bold(`🎉 MISSION COMPLETE: ALL ${domains.length} DOMAINS ANALYZED`));
-    console.log(chalk.green.bold('█'.repeat(80)));
-
-    // Export to CSV if requested
     if (this.csvExporter && this.options.exportCsv) {
       await this.csvExporter.exportToFile(this.options.exportCsv);
     }
-    
-    // Export to JSON if requested
     if (this.jsonExporter && this.options.exportJson) {
       await this.jsonExporter.exportToFile(this.options.exportJson);
     }
   }
 
-  private async investigateSingle(domain: string): Promise<void> {
-    try {
-      // Clear separation with domain header
-      console.log('\n' + chalk.yellow('='.repeat(80)));
-      console.log(chalk.yellow.bold(`🎯 ANALYZING TARGET: ${domain.toUpperCase()}`));
-      console.log(chalk.yellow('='.repeat(80)));
-      console.log(chalk.cyan('📡 Initiating intelligence gathering operations...\n'));
-      
-      const domainInfo: DomainInfo = { domain };
+  private async gather(domain: string): Promise<DomainInfo> {
+    const info: DomainInfo = { domain };
 
-      // Execute intelligence gathering (same parallel logic as original)
-      const whoisSpinner = createSpinner(`WHOIS: ${domain}`);
-      const dnsSpinner = createSpinner(`DNS: ${domain}`);
-      const sslSpinner = createSpinner(`SSL: ${domain}`);
-      const networkSpinner = this.options.quick ? null : createSpinner(`Network: ${domain}`);
-      const subdomainSpinner = this.options.subdomains ? createSpinner(`Subdomains: ${domain}`) : null;
-
-      whoisSpinner.start();
-      dnsSpinner.start();
-      sslSpinner.start();
-      if (networkSpinner) networkSpinner.start();
-      if (subdomainSpinner) subdomainSpinner.start();
-
-      const intelligencePromises = [
-        this.gatherWhoisIntelligence(domain, whoisSpinner),
-        this.gatherDnsIntelligence(domain, dnsSpinner),
-        this.gatherSslIntelligence(domain, sslSpinner),
-        ...(this.options.quick ? [] : [this.gatherNetworkIntelligence(domain, networkSpinner!)]),
-        ...(this.options.subdomains ? [this.gatherSubdomainIntelligence(domain, subdomainSpinner!)] : [])
-      ];
-
-      const results = await Promise.allSettled(intelligencePromises);
-
-      // Process results more carefully for multiple domain scenario
-      let resultIndex = 0;
-      domainInfo.whois = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      resultIndex++;
-      
-      domainInfo.dns = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      resultIndex++;
-      
-      domainInfo.ssl = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      resultIndex++;
-      
-      if (!this.options.quick) {
-        domainInfo.network = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-        resultIndex++;
-      }
-      
-      if (this.options.subdomains) {
-        domainInfo.subdomains = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      }
-
-      // Use full detailed report for each domain
-      await this.generateIntelligenceReport(domainInfo);
-
-      // Add to CSV export if enabled
-      if (this.csvExporter) {
-        this.csvExporter.addDomain(domainInfo);
-      }
-      
-      // Add to JSON export if enabled
-      if (this.jsonExporter) {
-        this.jsonExporter.addDomain(domainInfo);
-      }
-
-    } catch (error) {
-      console.log(chalk.red(`❌ Failed to analyze ${domain}: ${error}`));
+    const tasks: Array<Promise<void>> = [
+      this.runWhois(domain).then(r => { info.whois = r ?? undefined; }),
+      this.runDns(domain).then(r => { info.dns = r ?? undefined; }),
+      this.runSsl(domain).then(r => { info.ssl = r ?? undefined; }),
+    ];
+    if (!this.options.quick) {
+      tasks.push(this.runNetwork(domain).then(r => { info.network = r ?? undefined; }));
     }
+    if (this.options.subdomains) {
+      tasks.push(this.runSubdomains(domain).then(r => { info.subdomains = r ?? undefined; }));
+    }
+
+    await Promise.all(tasks);
+    return info;
   }
 
-  async investigate(domain: string): Promise<void> {
-    console.log(chalk.yellow(`🎯 TARGET ACQUIRED: ${domain.toUpperCase()}`));
-    console.log(chalk.cyan('📡 Initiating intelligence gathering operations...\n'));
-
-    const domainInfo: DomainInfo = { domain };
-
-    try {
-      // Initialize all spinners
-      const whoisSpinner = createSpinner('Accessing WHOIS intelligence database...');
-      const dnsSpinner = createSpinner('Intercepting DNS communications...');
-      const sslSpinner = createSpinner('Analyzing encryption protocols...');
-      const networkSpinner = this.options.quick ? null : createSpinner('Conducting network reconnaissance...');
-      const subdomainSpinner = this.options.subdomains ? createSpinner('Discovering subdomains...') : null;
-
-      // Start all spinners
-      whoisSpinner.start();
-      dnsSpinner.start();
-      sslSpinner.start();
-      if (networkSpinner) networkSpinner.start();
-      if (subdomainSpinner) subdomainSpinner.start();
-
-      // Execute all intelligence gathering operations in parallel
-      const intelligencePromises = [
-        this.gatherWhoisIntelligence(domain, whoisSpinner),
-        this.gatherDnsIntelligence(domain, dnsSpinner),
-        this.gatherSslIntelligence(domain, sslSpinner),
-        ...(this.options.quick ? [] : [this.gatherNetworkIntelligence(domain, networkSpinner!)]),
-        ...(this.options.subdomains ? [this.gatherSubdomainIntelligence(domain, subdomainSpinner!)] : [])
-      ];
-
-      const results = await Promise.allSettled(intelligencePromises);
-
-      // Process results more carefully for single domain scenario
-      let resultIndex = 0;
-      domainInfo.whois = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      resultIndex++;
-      
-      domainInfo.dns = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      resultIndex++;
-      
-      domainInfo.ssl = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      resultIndex++;
-      
-      if (!this.options.quick) {
-        domainInfo.network = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-        resultIndex++;
-      }
-      
-      if (this.options.subdomains) {
-        domainInfo.subdomains = results[resultIndex].status === 'fulfilled' ? (results[resultIndex] as PromiseFulfilledResult<any>).value : null;
-      }
-
-      await this.generateIntelligenceReport(domainInfo);
-
-      // Add to CSV export if enabled
-      if (this.csvExporter) {
-        this.csvExporter.addDomain(domainInfo);
-        await this.csvExporter.exportToFile(this.options.exportCsv!);
-      }
-      
-      // Add to JSON export if enabled
-      if (this.jsonExporter) {
-        this.jsonExporter.addDomain(domainInfo);
-        await this.jsonExporter.exportToFile(this.options.exportJson!);
-      }
-
-    } catch (error) {
-      criticalAlert(`Mission failed: ${error}`);
-    }
+  private renderReport(info: DomainInfo): void {
+    domainHeading(info.domain);
+    if (hasWhoisData(info.whois)) this.renderWhois(info.whois!);
+    if (hasDnsData(info.dns)) this.renderDns(info.dns!);
+    if (info.ssl) this.renderSsl(info.ssl);
+    if (info.network?.openPorts?.length) this.renderPorts(info.network);
+    if (info.subdomains && info.subdomains.totalFound > 0) this.renderSubdomains(info.subdomains);
+    this.renderAdvisories(info);
   }
 
-  private async generateIntelligenceReport(info: DomainInfo): Promise<void> {
-    console.log('\n' + chalk.yellow('=' .repeat(60)));
-    console.log(chalk.yellow.bold(`🔍 INTELLIGENCE REPORT: ${info.domain.toUpperCase()}`));
-    console.log(chalk.yellow('=' .repeat(60)) + '\n');
+  // --- Single-aspect commands ------------------------------------------------
 
-    // WHOIS Intelligence
-    if (info.whois) {
-      console.log(chalk.cyan.bold('📋 REGISTRATION INTELLIGENCE'));
-      const whoisTable = new Table({
-        style: { head: ['cyan'] },
-        colWidths: [20, 40]
-      });
+  /** Each returns true when data was found and rendered, false otherwise. */
 
-      if (info.whois.registrar) whoisTable.push(['Registrar', info.whois.registrar]);
-      if (info.whois.registrationDate) whoisTable.push(['Registered', info.whois.registrationDate]);
-      if (info.whois.expirationDate) whoisTable.push(['Expires', info.whois.expirationDate]);
-      if (info.whois.registrantCountry) whoisTable.push(['Country', info.whois.registrantCountry]);
-      if (info.whois.status) whoisTable.push(['Status', info.whois.status.join(', ')]);
-
-      console.log(whoisTable.toString());
-      console.log();
-    }
-
-    // DNS Intelligence
-    if (info.dns) {
-      console.log(chalk.green.bold('🌐 DNS INTELLIGENCE'));
-      const dnsTable = new Table({
-        style: { head: ['green'] },
-        colWidths: [15, 45]
-      });
-
-      if (info.dns.a && info.dns.a.length > 0) {
-        dnsTable.push(['A Records', info.dns.a.join('\n')]);
-      }
-      if (info.dns.aaaa && info.dns.aaaa.length > 0) {
-        dnsTable.push(['AAAA Records', info.dns.aaaa.join('\n')]);
-      }
-      if (info.dns.mx && info.dns.mx.length > 0) {
-        const mxRecords = info.dns.mx.map(mx => `${mx.priority} ${mx.exchange}`).join('\n');
-        dnsTable.push(['MX Records', mxRecords]);
-      }
-      if (info.dns.ns && info.dns.ns.length > 0) {
-        dnsTable.push(['NS Records', info.dns.ns.join('\n')]);
-      }
-      if (info.dns.txt && info.dns.txt.length > 0) {
-        dnsTable.push(['TXT Records', info.dns.txt.slice(0, 3).join('\n')]);
-      }
-
-      console.log(dnsTable.toString());
-      console.log();
-    }
-
-    // SSL Certificate Intelligence
-    if (info.ssl) {
-      console.log(chalk.magenta.bold('🔒 ENCRYPTION INTELLIGENCE'));
-      const sslTable = new Table({
-        style: { head: ['magenta'] },
-        colWidths: [20, 40]
-      });
-
-      if (info.ssl.subject) sslTable.push(['Subject', info.ssl.subject]);
-      if (info.ssl.issuer) sslTable.push(['Issuer', info.ssl.issuer]);
-      if (info.ssl.validFrom) sslTable.push(['Valid From', info.ssl.validFrom]);
-      if (info.ssl.validTo) sslTable.push(['Valid To', info.ssl.validTo]);
-      if (info.ssl.daysUntilExpiry !== undefined) {
-        const expiryColor = info.ssl.daysUntilExpiry < 30 ? 'red' : 
-                           info.ssl.daysUntilExpiry < 90 ? 'yellow' : 'green';
-        sslTable.push(['Days Until Expiry', chalk[expiryColor](`${info.ssl.daysUntilExpiry} days`)]);
-      }
-      if (info.ssl.fingerprint) sslTable.push(['Fingerprint', info.ssl.fingerprint]);
-      if (info.ssl.signatureAlgorithm) sslTable.push(['Signature Algorithm', info.ssl.signatureAlgorithm]);
-
-      console.log(sslTable.toString());
-      console.log();
-    }
-
-    // Network Intelligence
-    if (info.network && info.network.openPorts && info.network.openPorts.length > 0) {
-      console.log(chalk.blue.bold('🌐 NETWORK INTELLIGENCE'));
-      const networkTable = new Table({
-        style: { head: ['blue'] },
-        head: ['Port', 'Protocol', 'Service', 'Status'],
-        colWidths: [8, 12, 15, 10]
-      });
-
-      info.network.services?.forEach(service => {
-        networkTable.push([
-          service.port.toString(),
-          service.protocol,
-          service.service,
-          chalk.red('OPEN')
-        ]);
-      });
-
-      console.log(networkTable.toString());
-      console.log();
-    }
-
-    // Subdomain Intelligence
-    if (info.subdomains && info.subdomains.totalFound > 0) {
-      console.log(chalk.magenta.bold('🔍 SUBDOMAIN INTELLIGENCE'));
-      
-      // Summary table
-      const subdomainSummary = new Table({
-        style: { head: ['magenta'] },
-        colWidths: [25, 35]
-      });
-
-      subdomainSummary.push(
-        ['Total Subdomains Found', info.subdomains.totalFound.toString()],
-        ['Certificate Transparency', info.subdomains.sources.certificateTransparency.length.toString()],
-        ['Common Names Found', info.subdomains.sources.commonNames.length.toString()],
-        ['DNS Enumeration', info.subdomains.sources.dnsEnumeration.length.toString()]
-      );
-
-      console.log(subdomainSummary.toString());
-
-      // Display found subdomains (limit to first 20 for readability)
-      if (info.subdomains.subdomains.length > 0) {
-        console.log(chalk.magenta.bold('\n📋 DISCOVERED SUBDOMAINS'));
-        const subdomainList = new Table({
-          style: { head: ['magenta'] },
-          head: ['Subdomain', 'Source'],
-          colWidths: [40, 20]
-        });
-
-        const displayLimit = Math.min(20, info.subdomains.subdomains.length);
-        
-        for (let i = 0; i < displayLimit; i++) {
-          const subdomain = info.subdomains.subdomains[i];
-          let source = 'Unknown';
-          
-          if (info.subdomains.sources.certificateTransparency.includes(subdomain)) {
-            source = 'Cert Transparency';
-          } else if (info.subdomains.sources.commonNames.includes(subdomain)) {
-            source = 'Common Name';
-          } else if (info.subdomains.sources.dnsEnumeration.includes(subdomain)) {
-            source = 'DNS Enum';
-          }
-
-          subdomainList.push([subdomain, source]);
-        }
-
-        console.log(subdomainList.toString());
-
-        if (info.subdomains.subdomains.length > 20) {
-          console.log(chalk.yellow(`... and ${info.subdomains.subdomains.length - 20} more subdomains`));
-        }
-      }
-
-      console.log();
-    }
-
-    // Threat Assessment
-    this.displayThreatAssessment(info);
-
-    missionComplete(`Intelligence gathering complete for ${info.domain}`);
+  async whoisReport(domain: string): Promise<boolean> {
+    const data = await this.withSpinner(`WHOIS ${domain}`, () => this.runWhois(domain));
+    if (hasWhoisData(data)) { this.renderWhois(data); return true; }
+    console.log('No WHOIS data available.');
+    return false;
   }
 
-  private async generateCompactReport(info: DomainInfo): Promise<void> {
-    console.log(chalk.cyan(`\n📊 INTELLIGENCE SUMMARY: ${info.domain.toUpperCase()}`));
-    
-    const summary = new Table({
-      style: { head: ['cyan'] },
-      colWidths: [25, 35]
-    });
-
-    // Quick status overview
-    const whoisStatus = info.whois ? '✅ Available' : '❌ Unavailable';
-    const dnsStatus = info.dns && (info.dns.a || info.dns.aaaa) ? '✅ Resolved' : '❌ Failed';
-    const sslStatus = info.ssl ? `✅ Valid (${info.ssl.daysUntilExpiry}d)` : '❌ No Certificate';
-    const networkStatus = info.network?.openPorts?.length ? 
-      `✅ ${info.network.openPorts.length} ports open` : '❌ No ports detected';
-
-    summary.push(
-      ['WHOIS Intelligence', whoisStatus],
-      ['DNS Resolution', dnsStatus],
-      ['SSL Certificate', sslStatus],
-      ['Network Services', networkStatus]
-    );
-
-    // Key details
-    if (info.whois?.registrar) {
-      summary.push(['Registrar', info.whois.registrar]);
-    }
-    if (info.whois?.expirationDate) {
-      summary.push(['Expires', info.whois.expirationDate]);
-    }
-    if (info.dns?.a && info.dns.a.length > 0) {
-      summary.push(['IPv4 Address', info.dns.a[0]]);
-    }
-    if (info.ssl?.issuer) {
-      summary.push(['SSL Issuer', info.ssl.issuer.split(',')[0]]);
-    }
-
-    console.log(summary.toString());
-
-    // Quick threat assessment
-    const threats = [];
-    if (info.ssl?.daysUntilExpiry !== undefined && info.ssl.daysUntilExpiry < 30) {
-      threats.push('⚠️  SSL expires soon');
-    }
-    if (!info.ssl) {
-      threats.push('⚠️  No SSL certificate');
-    }
-    if (info.whois?.registrationDate) {
-      const regDate = new Date(info.whois.registrationDate);
-      const daysSinceReg = (Date.now() - regDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceReg < 30) {
-        threats.push('⚠️  Recently registered');
-      }
-    }
-
-    if (threats.length > 0) {
-      console.log(chalk.red('\n🚨 ALERTS: ' + threats.join(' | ')));
-    } else {
-      console.log(chalk.green('\n✅ No immediate threats detected'));
-    }
+  async dnsReport(domain: string): Promise<boolean> {
+    const data = await this.withSpinner(`DNS ${domain}`, () => this.runDns(domain));
+    if (hasDnsData(data)) { this.renderDns(data); return true; }
+    console.log('No DNS records found.');
+    return false;
   }
 
-  private async gatherWhoisIntelligence(domain: string, spinner: any): Promise<any> {
+  async sslReport(domain: string): Promise<boolean> {
+    const data = await this.withSpinner(`SSL ${domain}`, () => this.runSsl(domain));
+    if (data) { this.renderSsl(data); return true; }
+    console.log('No SSL certificate found.');
+    return false;
+  }
+
+  async portsReport(domain: string): Promise<boolean> {
+    const data = await this.withSpinner(`Ports ${domain}`, () => this.runNetwork(domain));
+    if (data?.openPorts?.length) { this.renderPorts(data); return true; }
+    console.log('No open ports detected.');
+    return false;
+  }
+
+  async subdomainReport(domain: string): Promise<boolean> {
+    const data = await this.withSpinner(`Subdomains ${domain}`, () => this.runSubdomains(domain));
+    if (data && data.totalFound > 0) { this.renderSubdomains(data); return true; }
+    console.log('No subdomains found.');
+    return false;
+  }
+
+  // --- Data gathering --------------------------------------------------------
+  //
+  // The fetchers never start their own spinner: several run concurrently and
+  // `ora` cannot animate more than one line at a time, so a single spinner is
+  // owned by the calling command (`withSpinner`) instead. Each fetcher resolves
+  // to its data or `null`, never rejecting, so callers can use `Promise.all`.
+
+  private async runWhois(domain: string): Promise<WhoisData | null> {
     try {
       const result = await this.whoisService.lookup(domain);
-      spinner.succeed(chalk.green('WHOIS intelligence gathered'));
-      return result;
+      // The lookup can succeed while the parser extracts nothing usable; treat
+      // that as "no data" so console, CSV, and JSON all agree.
+      return hasWhoisData(result) ? result : null;
     } catch (error) {
-      spinner.fail(chalk.red('WHOIS intelligence unavailable'));
-      if (this.options.verbose) {
-        console.log(chalk.red(`Error: ${error}`));
-      }
+      this.logVerbose(error);
       return null;
     }
   }
 
-  private async gatherDnsIntelligence(domain: string, spinner: any): Promise<any> {
+  private async runDns(domain: string): Promise<DNSData | null> {
     try {
-      const result = await this.dnsService.lookup(domain);
-      spinner.succeed(chalk.green('DNS intelligence captured'));
-      return result;
+      return await this.dnsService.lookup(domain);
     } catch (error) {
-      spinner.fail(chalk.red('DNS intelligence compromised'));
-      if (this.options.verbose) {
-        console.log(chalk.red(`Error: ${error}`));
-      }
+      this.logVerbose(error);
       return null;
     }
   }
 
-  private async gatherSslIntelligence(domain: string, spinner: any): Promise<any> {
+  private async runSsl(domain: string): Promise<SSLData | null> {
     try {
-      const result = await this.sslService.getCertificate(domain);
-      spinner.succeed(chalk.green('Encryption analysis complete'));
-      return result;
+      return await this.sslService.getCertificate(domain);
     } catch (error) {
-      spinner.fail(chalk.red('Encryption analysis failed'));
-      if (this.options.verbose) {
-        console.log(chalk.red(`Error: ${error}`));
-      }
+      this.logVerbose(error);
       return null;
     }
   }
 
-  private async gatherNetworkIntelligence(domain: string, spinner: any): Promise<any> {
+  private async runNetwork(domain: string): Promise<NetworkData | null> {
     try {
-      const result = await this.networkService.getNetworkInfo(domain);
-      spinner.succeed(chalk.green('Network reconnaissance complete'));
-      return result;
+      return await this.networkService.getNetworkInfo(domain);
     } catch (error) {
-      spinner.fail(chalk.red('Network reconnaissance failed'));
-      if (this.options.verbose) {
-        console.log(chalk.red(`Error: ${error}`));
-      }
+      this.logVerbose(error);
       return null;
     }
   }
 
-  private async gatherSubdomainIntelligence(domain: string, spinner: any): Promise<any> {
+  private async runSubdomains(domain: string): Promise<SubdomainData | null> {
     try {
-      const result = await this.subdomainService.discoverSubdomains(domain);
-      spinner.succeed(chalk.green(`Subdomain discovery complete (${result.totalFound} found)`));
-      return result;
+      return await this.subdomainService.discoverSubdomains(domain);
     } catch (error) {
-      spinner.fail(chalk.red('Subdomain discovery failed'));
-      if (this.options.verbose) {
-        console.log(chalk.red(`Error: ${error}`));
-      }
+      this.logVerbose(error);
       return null;
     }
   }
 
-  private displayThreatAssessment(info: DomainInfo): void {
-    console.log(chalk.red.bold('⚠️  THREAT ASSESSMENT'));
-    
-    const threats = [];
-    
-    // Check SSL expiry
-    if (info.ssl?.daysUntilExpiry !== undefined && info.ssl.daysUntilExpiry < 30) {
-      threats.push('SSL certificate expires soon');
+  /** Run `work` under a single spinner so concurrent lookups never fight for the TTY line. */
+  private async withSpinner<T>(label: string, work: () => Promise<T>): Promise<T> {
+    const spinner = createSpinner(label).start();
+    try {
+      const result = await work();
+      spinner.succeed(label);
+      return result;
+    } catch (error) {
+      spinner.fail(label);
+      throw error;
     }
-    
-    // Check if no SSL
-    if (!info.ssl) {
-      threats.push('No SSL certificate detected');
-    }
-    
-    // Check domain age (if registration is recent)
-    if (info.whois?.registrationDate) {
-      const regDate = new Date(info.whois.registrationDate);
-      const now = new Date();
-      const daysSinceReg = (now.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24);
-      
-      if (daysSinceReg < 30) {
-        threats.push('Domain registered very recently');
-      }
-    }
+  }
 
-    const threatTable = new Table({
-      style: { head: ['red'] },
-      colWidths: [60]
+  private logVerbose(error: unknown): void {
+    if (this.options.verbose) {
+      printError(String(error));
+    }
+  }
+
+  // --- Section renderers -----------------------------------------------------
+
+  private renderWhois(whois: WhoisData): void {
+    heading('Registration (WHOIS)');
+    const table = new Table({ colWidths: [20, 50], wordWrap: true });
+    if (whois.registrar) table.push(['Registrar', whois.registrar]);
+    if (whois.registrationDate) table.push(['Registered', whois.registrationDate]);
+    if (whois.expirationDate) table.push(['Expires', whois.expirationDate]);
+    if (whois.registrantCountry) table.push(['Country', whois.registrantCountry]);
+    if (whois.nameServers?.length) table.push(['Name servers', whois.nameServers.join('\n')]);
+    if (whois.status?.length) table.push(['Status', whois.status.join('\n')]);
+    console.log(table.toString());
+  }
+
+  private renderDns(dns: DNSData): void {
+    heading('DNS records');
+    const table = new Table({ colWidths: [15, 55], wordWrap: true });
+    if (dns.a?.length) table.push(['A', dns.a.join('\n')]);
+    if (dns.aaaa?.length) table.push(['AAAA', dns.aaaa.join('\n')]);
+    // A "null MX" (RFC 7505) has an empty exchange — skip it rather than print a bare priority.
+    const mx = dns.mx?.filter(m => m.exchange && m.exchange !== '.') ?? [];
+    if (mx.length) table.push(['MX', mx.map(m => `${m.priority} ${m.exchange}`).join('\n')]);
+    if (dns.ns?.length) table.push(['NS', dns.ns.join('\n')]);
+    if (dns.txt?.length) table.push(['TXT', dns.txt.slice(0, 5).join('\n')]);
+    console.log(table.toString());
+  }
+
+  private renderSsl(ssl: SSLData): void {
+    heading('SSL certificate');
+    const table = new Table({ colWidths: [20, 50], wordWrap: true });
+    if (ssl.subject) table.push(['Subject', ssl.subject]);
+    if (ssl.issuer) table.push(['Issuer', ssl.issuer]);
+    if (ssl.validFrom) table.push(['Valid from', ssl.validFrom]);
+    if (ssl.validTo) table.push(['Valid to', ssl.validTo]);
+    if (ssl.daysUntilExpiry !== undefined) {
+      const days = ssl.daysUntilExpiry;
+      const color = days < 30 ? chalk.red : days < 90 ? chalk.yellow : chalk.green;
+      table.push(['Days until expiry', color(`${days}`)]);
+    }
+    if (ssl.signatureAlgorithm) table.push(['Signature', ssl.signatureAlgorithm]);
+    if (ssl.fingerprint) table.push(['Fingerprint', ssl.fingerprint]);
+    console.log(table.toString());
+  }
+
+  private renderPorts(network: NetworkData): void {
+    if (!network.openPorts?.length) return;
+    heading('Open ports');
+    const table = new Table({ head: ['Port', 'Protocol', 'Service'], colWidths: [10, 12, 18] });
+    network.services?.forEach(service => {
+      table.push([service.port.toString(), service.protocol, service.service]);
     });
-
-    if (threats.length === 0) {
-      threatTable.push([chalk.green('✅ No immediate threats detected')]);
-    } else {
-      threats.forEach(threat => {
-        threatTable.push([chalk.red(`⚠️ ${threat}`)]);
-      });
-    }
-
-    console.log(threatTable.toString());
-    console.log();
+    console.log(table.toString());
   }
+
+  private renderSubdomains(sub: SubdomainData): void {
+    heading(`Subdomains (${sub.totalFound} found)`);
+
+    const summary = new Table({ colWidths: [28, 12] });
+    summary.push(
+      ['Certificate transparency', sub.sources.certificateTransparency.length.toString()],
+      ['Common names', sub.sources.commonNames.length.toString()],
+    );
+    console.log(summary.toString());
+
+    if (sub.subdomains.length === 0) return;
+
+    const limit = Math.min(20, sub.subdomains.length);
+    const list = new Table({ head: ['Subdomain', 'Source'], colWidths: [45, 24], wordWrap: true });
+    for (let i = 0; i < limit; i++) {
+      const name = sub.subdomains[i];
+      const found: string[] = [];
+      if (sub.sources.certificateTransparency.includes(name)) found.push('Cert transparency');
+      if (sub.sources.commonNames.includes(name)) found.push('Common name');
+      list.push([name, found.join(', ') || 'Unknown']);
+    }
+    console.log(list.toString());
+
+    if (sub.subdomains.length > limit) {
+      console.log(chalk.dim(`... and ${sub.subdomains.length - limit} more`));
+    }
+  }
+
+  private renderAdvisories(info: DomainInfo): void {
+    heading('Advisories');
+    const advisories = collectAdvisories(info);
+    if (advisories.length === 0) {
+      console.log(chalk.green('No issues found.'));
+      return;
+    }
+    for (const advisory of advisories) {
+      console.log(chalk.yellow(`- ${advisory}`));
+    }
+  }
+}
+
+function hasWhoisData(whois: WhoisData | null | undefined): whois is WhoisData {
+  return !!whois && Object.keys(whois).length > 0;
+}
+
+function hasDnsData(dns: DNSData | null | undefined): dns is DNSData {
+  return !!dns && Object.keys(dns).length > 0;
+}
+
+/** Lightweight, factual checks surfaced at the end of a report. */
+export function collectAdvisories(info: DomainInfo): string[] {
+  const advisories: string[] = [];
+
+  if (!info.ssl) {
+    advisories.push('No SSL certificate detected.');
+  } else if (info.ssl.daysUntilExpiry !== undefined && info.ssl.daysUntilExpiry < 30) {
+    advisories.push(`SSL certificate expires in ${info.ssl.daysUntilExpiry} days.`);
+  }
+
+  if (info.whois?.registrationDate) {
+    const days = (Date.now() - new Date(info.whois.registrationDate).getTime()) / 86_400_000;
+    if (days >= 0 && days < 30) {
+      advisories.push(`Domain was registered ${Math.round(days)} days ago.`);
+    }
+  }
+
+  return advisories;
 }

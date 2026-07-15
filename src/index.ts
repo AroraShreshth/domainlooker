@@ -1,47 +1,89 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import chalk from 'chalk';
-import figlet from 'figlet';
-import gradient from 'gradient-string';
-import boxen from 'boxen';
 import { DomainInspector } from './domain-inspector.js';
-import { displayBanner, typeWriter } from './ui/effects.js';
+import { printError } from './ui/effects.js';
 
 const program = new Command();
 
-async function main() {
-  await displayBanner();
-  
-  program
-    .name('domainlooker')
-    .description('🕵️  Mission-critical domain intelligence gathering tool')
-    .version('0.1.3');
+program
+  .name('domainlooker')
+  .description('A CLI suite for inspecting domains: WHOIS, DNS, SSL, ports, and subdomains.')
+  .version('0.2.0')
+  .showHelpAfterError('(run with --help for a list of commands)');
 
+/**
+ * The default command has a variadic `<domains...>` argument, so a mistyped
+ * subcommand (e.g. `sssl example.com`) would otherwise be silently treated as a
+ * domain. Require every value to at least look like a hostname (a dot and only
+ * host characters). This also accepts bare IPv4 addresses and a trailing-dot FQDN.
+ */
+function looksLikeDomain(value: string): boolean {
+  return /^(?=.{1,254}$)([a-zA-Z0-9_-]+\.)+[a-zA-Z0-9_-]+\.?$/.test(value);
+}
+
+program
+  .command('inspect', { isDefault: true })
+  .description('Run a full report (WHOIS, DNS, SSL, ports, advisories)')
+  .argument('<domains...>', 'One or more domains to inspect')
+  .option('-v, --verbose', 'Show underlying errors')
+  .option('-q, --quick', 'Skip the port scan')
+  .option('--subdomains', 'Also discover subdomains')
+  .option('-p, --parallel <number>', 'Domains to process in parallel', '3')
+  .option('--export-csv <file>', 'Write results to a CSV file')
+  .option('--export-json <file>', 'Write results to a JSON file')
+  .action(async (domains: string[], options) => {
+    const invalid = domains.filter(d => !looksLikeDomain(d));
+    if (invalid.length > 0) {
+      printError(`not a valid domain: ${invalid.map(d => `'${d}'`).join(', ')}`);
+      console.error("(run 'domainlooker --help' to see available commands)");
+      process.exitCode = 1;
+      return;
+    }
+
+    const inspector = new DomainInspector(options);
+    if (domains.length === 1) {
+      await inspector.inspect(domains[0]);
+    } else {
+      await inspector.inspectMany(domains, parseInt(options.parallel, 10));
+    }
+  });
+
+interface SingleAspectCommand {
+  name: string;
+  description: string;
+  run: (inspector: DomainInspector, domain: string) => Promise<boolean>;
+}
+
+const singleAspectCommands: SingleAspectCommand[] = [
+  { name: 'whois', description: 'Show registration (WHOIS) data', run: (i, d) => i.whoisReport(d) },
+  { name: 'dns', description: 'Show DNS records', run: (i, d) => i.dnsReport(d) },
+  { name: 'ssl', description: 'Show the SSL certificate', run: (i, d) => i.sslReport(d) },
+  { name: 'ports', description: 'Scan for open ports', run: (i, d) => i.portsReport(d) },
+  { name: 'subdomains', description: 'Discover subdomains', run: (i, d) => i.subdomainReport(d) },
+];
+
+for (const { name, description, run } of singleAspectCommands) {
   program
-    .argument('<domains...>', 'Target domain(s) to investigate (space-separated for multiple)')
-    .option('-v, --verbose', 'Enable verbose output')
-    .option('-q, --quick', 'Quick scan only')
-    .option('--no-banner', 'Skip the banner')
-    .option('-p, --parallel <number>', 'Number of domains to process in parallel (default: 3)', '3')
-    .option('--export-csv <filename>', 'Export results to CSV file')
-    .option('--export-json <filename>', 'Export results to structured JSON file')
-    .option('--subdomains', 'Enable subdomain discovery and enumeration')
-    .action(async (domains: string[], options) => {
+    .command(name)
+    .description(description)
+    .argument('<domain>', 'Domain to inspect')
+    .option('-v, --verbose', 'Show underlying errors')
+    .action(async (domain: string, options) => {
       const inspector = new DomainInspector(options);
-      
-      if (domains.length === 1) {
-        // Single domain analysis
-        await inspector.investigate(domains[0]);
-      } else {
-        // Multiple domain analysis
-        await inspector.investigateMultiple(domains, parseInt(options.parallel));
-      }
+      const found = await run(inspector, domain);
+      // Exit non-zero when nothing was found, so scripts can branch on it.
+      if (!found) process.exitCode = 1;
     });
-
-  program.parse();
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(console.error);
+async function main(): Promise<void> {
+  try {
+    await program.parseAsync(process.argv);
+  } catch (error) {
+    printError(String(error));
+    process.exitCode = 1;
+  }
 }
+
+main();

@@ -115,30 +115,29 @@ jobs:
     - name: Generate release notes
       if: github.event_name == 'workflow_dispatch'
       run: |
-        echo "## 🚀 DOMAINLOOKER v${{ env.NEW_VERSION }}" > release-notes.md
+        echo "## domainlooker v${{ env.NEW_VERSION }}" > release-notes.md
         echo "" >> release-notes.md
-        echo "### 🎯 What's New" >> release-notes.md
+        echo "### What's New" >> release-notes.md
         echo "" >> release-notes.md
-        echo "Professional domain intelligence gathering CLI tool with comprehensive analysis capabilities." >> release-notes.md
+        echo "A CLI suite for inspecting domains: WHOIS, DNS, SSL, ports, and subdomains." >> release-notes.md
         echo "" >> release-notes.md
-        echo "### ✨ Features" >> release-notes.md
-        echo "- 🔍 **WHOIS Analysis** - Complete domain registration intelligence" >> release-notes.md
-        echo "- 🌐 **DNS Investigation** - Comprehensive DNS record analysis (A, AAAA, MX, NS, TXT, SOA)" >> release-notes.md
-        echo "- 🔒 **SSL Certificate Inspection** - Certificate validation and expiry monitoring" >> release-notes.md
-        echo "- 🔥 **Network Scanning** - Port discovery and service identification" >> release-notes.md
-        echo "- 🕸️ **Subdomain Discovery** - Advanced subdomain enumeration techniques" >> release-notes.md
-        echo "- 📊 **Export Options** - CSV and JSON export with API-ready schemas" >> release-notes.md
-        echo "- ⚠️ **Threat Assessment** - Automated security risk evaluation" >> release-notes.md
-        echo "- 🎯 **Batch Processing** - Multiple domain analysis with parallel processing" >> release-notes.md
+        echo "### Features" >> release-notes.md
+        echo "- WHOIS registration lookup" >> release-notes.md
+        echo "- DNS record analysis (A, AAAA, MX, NS, TXT, SOA)" >> release-notes.md
+        echo "- SSL certificate validation and expiry monitoring" >> release-notes.md
+        echo "- Port discovery and service identification" >> release-notes.md
+        echo "- Subdomain discovery" >> release-notes.md
+        echo "- CSV and JSON export" >> release-notes.md
+        echo "- Batch processing with parallel lookups" >> release-notes.md
         echo "" >> release-notes.md
-        echo "### 📦 Installation" >> release-notes.md
+        echo "### Installation" >> release-notes.md
         echo "\`\`\`bash" >> release-notes.md
         echo "npm install -g domainlooker@${{ env.NEW_VERSION }}" >> release-notes.md
         echo "\`\`\`" >> release-notes.md
         echo "" >> release-notes.md
-        echo "### 🚀 Quick Start" >> release-notes.md
+        echo "### Quick Start" >> release-notes.md
         echo "\`\`\`bash" >> release-notes.md
-        echo "# Single domain analysis" >> release-notes.md
+        echo "# Inspect a single domain" >> release-notes.md
         echo "domainlooker example.com" >> release-notes.md
         echo "" >> release-notes.md
         echo "# Multiple domains with subdomain discovery" >> release-notes.md
@@ -148,18 +147,15 @@ jobs:
         echo "domainlooker example.com --export-json report.json" >> release-notes.md
         echo "\`\`\`" >> release-notes.md
         echo "" >> release-notes.md
-        echo "### 🔗 Links" >> release-notes.md
-        echo "- 📖 [Documentation](https://github.com/${{ github.repository }}#readme)" >> release-notes.md
-        echo "- 📦 [npm Package](https://www.npmjs.com/package/domainlooker)" >> release-notes.md
-        echo "- 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)" >> release-notes.md
-        echo "- 🤝 [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md)" >> release-notes.md
+        echo "### Links" >> release-notes.md
+        echo "- [Documentation](https://github.com/${{ github.repository }}#readme)" >> release-notes.md
+        echo "- [npm Package](https://www.npmjs.com/package/domainlooker)" >> release-notes.md
+        echo "- [Report Issues](https://github.com/${{ github.repository }}/issues)" >> release-notes.md
+        echo "- [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md)" >> release-notes.md
         echo "" >> release-notes.md
-        echo "### 🛠️ Requirements" >> release-notes.md
-        echo "- Node.js 16.0.0 or higher" >> release-notes.md
+        echo "### Requirements" >> release-notes.md
+        echo "- Node.js 18.0.0 or higher" >> release-notes.md
         echo "- Internet connection for domain lookups" >> release-notes.md
-        echo "" >> release-notes.md
-        echo "---" >> release-notes.md
-        echo "**Made with ❤️ for the cybersecurity and developer community**" >> release-notes.md
         
     - name: Create GitHub Release (manual trigger)
       if: github.event_name == 'workflow_dispatch'
@@ -167,7 +163,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         gh release create "v${{ env.NEW_VERSION }}" \
-          --title "🕵️ DOMAINLOOKER v${{ env.NEW_VERSION }}" \
+          --title "domainlooker v${{ env.NEW_VERSION }}" \
           --notes-file release-notes.md \
           --latest
 

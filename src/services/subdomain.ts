@@ -1,15 +1,6 @@
 import { promises as dns } from 'dns';
 import axios from 'axios';
-
-export interface SubdomainData {
-  subdomains: string[];
-  sources: {
-    dnsEnumeration: string[];
-    certificateTransparency: string[];
-    commonNames: string[];
-  };
-  totalFound: number;
-}
+import { SubdomainData } from '../types/index.js';
 
 export class SubdomainService {
   private commonSubdomains = [
@@ -30,21 +21,18 @@ export class SubdomainService {
 
   async discoverSubdomains(domain: string): Promise<SubdomainData> {
     const sources = {
-      dnsEnumeration: [] as string[],
       certificateTransparency: [] as string[],
       commonNames: [] as string[]
     };
 
-    // Run all discovery methods in parallel
-    const [dnsResults, ctResults, commonResults] = await Promise.allSettled([
-      this.dnsEnumeration(domain),
-      this.certificateTransparencyLookup(domain),
-      this.commonSubdomainCheck(domain)
-    ]);
+    // Wildcard DNS makes the common-name resolution check meaningless (every name
+    // resolves), so skip it when a wildcard is present and rely on cert transparency.
+    const hasWildcard = await this.checkWildcardDNS(domain);
 
-    if (dnsResults.status === 'fulfilled') {
-      sources.dnsEnumeration = dnsResults.value;
-    }
+    const [ctResults, commonResults] = await Promise.allSettled([
+      this.certificateTransparencyLookup(domain),
+      hasWildcard ? Promise.resolve([]) : this.commonSubdomainCheck(domain)
+    ]);
 
     if (ctResults.status === 'fulfilled') {
       sources.certificateTransparency = ctResults.value;
@@ -56,7 +44,6 @@ export class SubdomainService {
 
     // Combine and deduplicate all found subdomains
     const allSubdomains = new Set([
-      ...sources.dnsEnumeration,
       ...sources.certificateTransparency,
       ...sources.commonNames
     ]);
@@ -68,31 +55,6 @@ export class SubdomainService {
       sources,
       totalFound: subdomains.length
     };
-  }
-
-  private async dnsEnumeration(domain: string): Promise<string[]> {
-    const subdomains: string[] = [];
-
-    try {
-      // Try to get NS records and enumerate from them
-      const nsRecords = await dns.resolveNs(domain).catch(() => []);
-      
-      // Check for wildcard DNS
-      const wildcardTest = await this.checkWildcardDNS(domain);
-      
-      if (!wildcardTest) {
-        // Perform zone transfer attempt (usually blocked but worth trying)
-        await this.attemptZoneTransfer(domain, nsRecords, subdomains);
-      }
-
-      // Try some advanced DNS techniques
-      await this.tryDNSBruteforce(domain, subdomains);
-
-    } catch (error) {
-      // DNS enumeration failed, continue with other methods
-    }
-
-    return subdomains;
   }
 
   private async certificateTransparencyLookup(domain: string): Promise<string[]> {
@@ -190,17 +152,6 @@ export class SubdomainService {
     }
   }
 
-  private async attemptZoneTransfer(domain: string, nsRecords: string[], subdomains: string[]): Promise<void> {
-    // Zone transfer attempts (usually blocked but educational)
-    // This is a placeholder - actual zone transfer would require more complex DNS queries
-    // Most modern DNS servers block zone transfers for security reasons
-  }
-
-  private async tryDNSBruteforce(domain: string, subdomains: string[]): Promise<void> {
-    // Additional DNS techniques could be added here
-    // Like trying numerical subdomains, etc.
-  }
-
   private isValidSubdomain(subdomain: string, baseDomain: string): boolean {
     // Basic validation for subdomain format
     if (!subdomain || subdomain === baseDomain) return false;
@@ -215,38 +166,5 @@ export class SubdomainService {
     const validSubdomainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
     
     return validSubdomainRegex.test(subPart);
-  }
-
-  // Get subdomain statistics
-  getSubdomainStats(subdomainData: SubdomainData): {
-    bySource: { [key: string]: number };
-    commonPatterns: { [key: string]: number };
-    depthAnalysis: { [key: number]: number };
-  } {
-    const stats = {
-      bySource: {
-        'DNS Enumeration': subdomainData.sources.dnsEnumeration.length,
-        'Certificate Transparency': subdomainData.sources.certificateTransparency.length,
-        'Common Names': subdomainData.sources.commonNames.length
-      },
-      commonPatterns: {} as { [key: string]: number },
-      depthAnalysis: {} as { [key: number]: number }
-    };
-
-    // Analyze common patterns
-    subdomainData.subdomains.forEach(subdomain => {
-      const parts = subdomain.split('.');
-      const depth = parts.length - 2; // Subtract base domain parts
-      
-      stats.depthAnalysis[depth] = (stats.depthAnalysis[depth] || 0) + 1;
-      
-      // Extract first level subdomain for pattern analysis
-      if (parts.length >= 3) {
-        const firstLevel = parts[parts.length - 3]; // e.g., 'www' from 'www.example.com'
-        stats.commonPatterns[firstLevel] = (stats.commonPatterns[firstLevel] || 0) + 1;
-      }
-    });
-
-    return stats;
   }
 }

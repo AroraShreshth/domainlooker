@@ -3,7 +3,6 @@ export interface DomainInfo {
   whois?: WhoisData;
   dns?: DNSData;
   ssl?: SSLData;
-  security?: SecurityData;
   network?: NetworkData;
   subdomains?: SubdomainData;
 }
@@ -11,7 +10,6 @@ export interface DomainInfo {
 export interface SubdomainData {
   subdomains: string[];
   sources: {
-    dnsEnumeration: string[];
     certificateTransparency: string[];
     commonNames: string[];
   };
@@ -58,14 +56,6 @@ export interface SSLData {
   daysUntilExpiry?: number;
 }
 
-export interface SecurityData {
-  threatLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  blacklisted?: boolean;
-  malwareDetected?: boolean;
-  phishingRisk?: boolean;
-  reputation?: number;
-}
-
 export interface NetworkData {
   openPorts?: number[];
   services?: Array<{
@@ -84,7 +74,6 @@ export interface NetworkData {
 export interface InspectionOptions {
   verbose?: boolean;
   quick?: boolean;
-  banner?: boolean;
   exportCsv?: string;
   exportJson?: string;
   subdomains?: boolean;

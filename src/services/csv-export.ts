@@ -150,10 +150,9 @@ export class CSVExportService {
     
     try {
       await fs.promises.writeFile(fullPath, csvContent, 'utf8');
-      console.log(`\n📊 CSV Export Complete: ${fullPath}`);
-      console.log(`📈 Exported ${this.csvData.length - 1} domains with complete intelligence data`);
+      console.log(`\nCSV written to ${fullPath} (${this.csvData.length - 1} domain(s))`);
     } catch (error) {
-      console.error(`❌ Failed to export CSV: ${error}`);
+      console.error(`Failed to write CSV: ${error}`);
       throw error;
     }
   }

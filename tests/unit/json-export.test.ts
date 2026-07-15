@@ -66,8 +66,8 @@ describe('JsonExportService', () => {
 
     it('should transform WHOIS data correctly', () => {
       const result = jsonExporter.getStructuredData();
-      const whoisAnalysis = result.data[0].whois;
-      
+      const whoisAnalysis = result.data[0].whois!;
+
       expect(whoisAnalysis.status).toBe('success');
       expect(whoisAnalysis.data?.registrar).toBe('Example Registrar Inc.');
       expect(whoisAnalysis.data?.registrantCountry).toBe('US');
@@ -76,8 +76,8 @@ describe('JsonExportService', () => {
 
     it('should transform DNS data correctly', () => {
       const result = jsonExporter.getStructuredData();
-      const dnsAnalysis = result.data[0].dns;
-      
+      const dnsAnalysis = result.data[0].dns!;
+
       expect(dnsAnalysis.status).toBe('success');
       expect(dnsAnalysis.data?.records.a).toEqual(['192.0.2.1', '192.0.2.2']);
       expect(dnsAnalysis.data?.summary.hasIpv4).toBe(true);
@@ -87,8 +87,8 @@ describe('JsonExportService', () => {
 
     it('should transform SSL data correctly', () => {
       const result = jsonExporter.getStructuredData();
-      const sslAnalysis = result.data[0].ssl;
-      
+      const sslAnalysis = result.data[0].ssl!;
+
       expect(sslAnalysis.status).toBe('success');
       expect(sslAnalysis.data?.certificate.subject).toBe('CN=example.com');
       expect(sslAnalysis.data?.validation.isValid).toBe(true);

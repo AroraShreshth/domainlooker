@@ -58,8 +58,7 @@ export const mockNetworkData: NetworkData = {
 export const mockSubdomainData: SubdomainData = {
   subdomains: ['www.example.com', 'mail.example.com', 'ftp.example.com'],
   sources: {
-    dnsEnumeration: ['www.example.com'],
-    certificateTransparency: ['mail.example.com'],
+    certificateTransparency: ['mail.example.com', 'www.example.com'],
     commonNames: ['ftp.example.com']
   },
   totalFound: 3

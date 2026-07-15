@@ -1,160 +1,105 @@
-# DOMAINLOOKER
+# domainlooker
 
-**Professional domain intelligence gathering CLI tool**
-
-Get comprehensive information about any domain including WHOIS data, DNS records, SSL certificates, network analysis, and subdomain discovery. Perfect for security researchers, developers, and system administrators.
+A command-line suite for inspecting domains — WHOIS, DNS, SSL, open ports, and subdomains — with CSV and JSON export.
 
 [![npm version](https://badge.fury.io/js/domainlooker.svg)](https://www.npmjs.com/package/domainlooker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI/CD Pipeline](https://github.com/AroraShreshth/domainlooker/actions/workflows/ci.yml/badge.svg)](https://github.com/AroraShreshth/domainlooker/actions/workflows/ci.yml)
-[![Security & Maintenance](https://github.com/AroraShreshth/domainlooker/actions/workflows/security.yml/badge.svg)](https://github.com/AroraShreshth/domainlooker/actions/workflows/security.yml)
 
-## Quick Start
+## Install
 
-Install globally:
 ```bash
 npm install -g domainlooker
 ```
 
-Analyze a domain:
+## Usage
+
+Run a full report on a domain:
+
 ```bash
 domainlooker example.com
 ```
 
-## Features
+Or use a single-aspect subcommand when you only need one thing:
 
-- **WHOIS Data** - Registration details and ownership information
-- **DNS Analysis** - Complete DNS record lookup (A, AAAA, MX, NS, TXT, SOA)
-- **SSL Certificates** - Certificate validation and expiry monitoring
-- **Network Scanning** - Port discovery and service identification
-- **Subdomain Discovery** - Find subdomains using multiple techniques
-- **Export Options** - Save results as CSV or JSON
-- **Threat Assessment** - Automated security risk evaluation
-- **Batch Processing** - Analyze multiple domains at once
-
-## Usage Examples
-
-### Single Domain Analysis
 ```bash
-domainlooker example.com
+domainlooker whois example.com
+domainlooker dns example.com
+domainlooker ssl example.com
+domainlooker ports example.com
+domainlooker subdomains example.com
 ```
 
-### Multiple Domains
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `inspect <domains...>` | Full report: WHOIS, DNS, SSL, ports, and advisories (this is the default, so `domainlooker <domain>` runs it) |
+| `whois <domain>` | Registration data |
+| `dns <domain>` | DNS records (A, AAAA, MX, NS, TXT, SOA) |
+| `ssl <domain>` | SSL certificate details and expiry |
+| `ports <domain>` | Scan common ports and identify services |
+| `subdomains <domain>` | Discover subdomains via certificate transparency and common-name checks |
+
+### `inspect` options
+
+```
+-q, --quick              Skip the port scan
+--subdomains             Also discover subdomains
+-p, --parallel <number>  Domains to process in parallel (default: 3)
+--export-csv <file>      Write results to a CSV file
+--export-json <file>     Write results to a JSON file
+-v, --verbose            Show underlying errors
+```
+
+## Examples
+
 ```bash
+# Inspect several domains at once
 domainlooker google.com github.com microsoft.com
+
+# Quick scan plus subdomain discovery
+domainlooker example.com --quick --subdomains
+
+# Export to CSV and JSON
+domainlooker example.com --export-csv report.csv --export-json report.json
 ```
 
-### Export Results
-```bash
-# Export to CSV
-domainlooker example.com --export-csv report.csv
-
-# Export to JSON (API-ready format)
-domainlooker example.com --export-json report.json
-```
-
-### Advanced Options
-```bash
-# Include subdomain discovery
-domainlooker example.com --subdomains
-
-# Quick scan (skip network analysis)
-domainlooker example.com --quick
-
-# Verbose output
-domainlooker example.com --verbose
-
-# Process multiple domains in parallel
-domainlooker domain1.com domain2.com domain3.com --parallel 5
-```
-
-## Command Line Options
+## Example output
 
 ```
-Usage: domainlooker [options] <domains...>
+Report: example.com
+═══════════════════
 
-Arguments:
-  domains...               Target domain(s) to investigate
+DNS records
+───────────
+┌───────────────┬───────────────────────────────┐
+│ A             │ 93.184.216.34                 │
+│ NS            │ a.iana-servers.net            │
+│               │ b.iana-servers.net            │
+└───────────────┴───────────────────────────────┘
 
-Options:
-  -V, --version           Display version number
-  -v, --verbose           Enable verbose output
-  -q, --quick            Quick scan (skip network analysis)
-  -p, --parallel <n>     Domains to process in parallel (default: 3)
-  --export-csv <file>    Export results to CSV file
-  --export-json <file>   Export results to JSON file
-  --subdomains          Enable subdomain discovery
-  --no-banner           Skip the banner
-  -h, --help            Display help
+SSL certificate
+───────────────
+┌────────────────────┬──────────────────────────┐
+│ Subject            │ CN=example.com           │
+│ Issuer             │ DigiCert Inc             │
+│ Days until expiry  │ 180                      │
+└────────────────────┴──────────────────────────┘
+
+Advisories
+──────────
+No issues found.
 ```
 
-## Output Example
+## JSON export
 
-```
-🎯 TARGET ACQUIRED: EXAMPLE.COM
-📡 Initiating intelligence gathering operations...
-
-============================================================
-🔍 INTELLIGENCE REPORT: EXAMPLE.COM
-============================================================
-
-📋 REGISTRATION INTELLIGENCE
-┌──────────────────┬──────────────────────────────────────┐
-│ Registrar        │ Example Registrar Inc.               │
-│ Registered       │ 2010-01-01T00:00:00Z                 │
-│ Expires          │ 2026-01-01T00:00:00Z                 │
-│ Country          │ US                                   │
-└──────────────────┴──────────────────────────────────────┘
-
-🌐 DNS INTELLIGENCE
-┌─────────────────┬───────────────────────────────────────┐
-│ A Records       │ 192.0.2.1                            │
-│ MX Records      │ 10 mail.example.com                  │
-│ NS Records      │ ns1.example.com, ns2.example.com     │
-└─────────────────┴───────────────────────────────────────┘
-
-🔒 SSL CERTIFICATE
-┌─────────────────┬───────────────────────────────────────┐
-│ Subject         │ CN=example.com                        │
-│ Issuer          │ DigiCert Inc                          │
-│ Valid From      │ 2025-01-01                            │
-│ Valid To        │ 2026-01-01                            │
-│ Days Until Exp  │ 180 days                              │
-└─────────────────┴───────────────────────────────────────┘
-
-⚠️ THREAT ASSESSMENT
-✅ No immediate threats detected
-```
-
-## What You Get
-
-- **Complete Domain Profile** - Registration info, DNS records, SSL details
-- **Security Analysis** - Certificate validation, threat assessment, vulnerability detection
-- **Export Options** - CSV for spreadsheets, JSON for APIs and automation
-- **Subdomain Discovery** - Find hidden subdomains using multiple techniques
-- **Professional Reports** - Clean, organized output with threat indicators
-
-## Use Cases
-
-- **Security Research** - Analyze domains for vulnerabilities and misconfigurations
-- **Development** - Verify domain configurations and SSL certificate status
-- **System Administration** - Monitor domain health and expiration dates
-- **Competitive Analysis** - Compare domain setups and infrastructure
-- **Compliance** - Generate reports for security audits and documentation
+`--export-json` writes a structured document (schema described in [docs/09-json-export-api.md](docs/09-json-export-api.md)) suitable for feeding into other tools or automation.
 
 ## Requirements
 
-- Node.js 16.0.0 or higher
-- Internet connection for domain lookups
+- Node.js 18 or higher
+- Internet access for lookups
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Issues and pull requests are welcome on [GitHub](https://github.com/AroraShreshth/domainlooker).
-
----
-
-**Made with ❤️ for the cybersecurity and developer community**
+MIT — see [LICENSE](LICENSE).
