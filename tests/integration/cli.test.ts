@@ -32,7 +32,7 @@ describe('CLI Integration Tests', () => {
     it('should display version information', async () => {
       const { stdout, stderr } = await execAsync(`node ${cliPath} --version`);
 
-      expect(stdout).toContain('0.2.0');
+      expect(stdout).toContain('0.2.1');
       expect(stderr).toBe('');
     }, 5000);
   });

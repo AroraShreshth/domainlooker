@@ -1,9 +1,28 @@
-import whois from 'whois';
 import axios from 'axios';
 import { WhoisData } from '../types/index.js';
 
 const RDAP_TIMEOUT_MS = 3500;
 const WHOIS_TIMEOUT_MS = 6000;
+
+type WhoisLookup = (
+  addr: string,
+  options: { timeout?: number },
+  callback: (err: Error | null, data: string) => void,
+) => void;
+
+// `whois` is loaded lazily — only the rare legacy fallback needs it (RDAP handles
+// most lookups). It ships as CommonJS in older releases (its `lookup` lives on the
+// default export) and as ESM named exports in newer ones (2.16+), so resolve
+// `lookup` from whichever shape is present. Loading it on demand also keeps the
+// ESM build off the module-load path of test runners that can't require it.
+async function loadLegacyWhoisLookup(): Promise<WhoisLookup> {
+  const mod: any = await import('whois');
+  const lookup = mod.lookup ?? mod.default?.lookup ?? mod.default;
+  if (typeof lookup !== 'function') {
+    throw new Error('whois: could not resolve a lookup function from the module');
+  }
+  return lookup;
+}
 
 export interface WhoisLookupOptions {
   /** Socket timeout (ms) for the legacy port-43 fallback. */
@@ -54,9 +73,10 @@ export class WhoisService {
     return parseRdapDomain(response.data);
   }
 
-  private legacyLookup(domain: string, timeout: number): Promise<WhoisData> {
+  private async legacyLookup(domain: string, timeout: number): Promise<WhoisData> {
+    const lookup = await loadLegacyWhoisLookup();
     return new Promise((resolve, reject) => {
-      whois.lookup(domain, { timeout }, (err: Error | null, data: string) => {
+      lookup(domain, { timeout }, (err: Error | null, data: string) => {
         if (err) {
           reject(err);
           return;

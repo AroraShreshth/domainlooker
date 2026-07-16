@@ -1,6 +1,6 @@
 {
   "name": "domainlooker",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A fast CLI and MCP server for inspecting domains: WHOIS/RDAP, DNS, SSL, ports, subdomains, with CSV/JSON export.",
   "main": "dist/index.js",
   "type": "module",
@@ -17,8 +17,9 @@
     "test:coverage": "jest --coverage",
     "test:core": "jest tests/unit/basic-functionality.test.ts tests/unit/dns-simple.test.ts",
     "test:mcp": "npm run build && vitest run",
+    "test:package": "npm run build && node scripts/smoke-package.mjs",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build && npm run test:core"
+    "prepublishOnly": "npm run build && npm run test:core && node scripts/smoke-package.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -27,7 +28,7 @@
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
     "ora": "^8.0.1",
-    "whois": "^2.13.5",
+    "whois": "^2.16.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
