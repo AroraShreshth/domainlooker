@@ -147,6 +147,23 @@ Releases are automated through GitHub Actions:
 3. After merge, tag the release
 4. GitHub Actions will automatically publish to npm
 
+## Docs site
+
+The docs page (`docs/index.html`) is hosted on Cloudflare Pages (project
+`domainlooker`) at <https://domainlooker.shreshtharora.com>, with the default
+alias <https://domainlooker.pages.dev>.
+
+Deploy manually with an authenticated wrangler:
+
+```bash
+wrangler pages deploy docs --project-name=domainlooker --branch=main
+```
+
+For hands-off deploys, connect the repo in the Cloudflare dashboard
+(Workers & Pages → Create → Pages → Connect to Git) with **build command:**
+none and **build output directory:** `docs` — Cloudflare then redeploys on
+every push to `main`.
+
 ## Need Help?
 
 - **Check existing issues** on GitHub

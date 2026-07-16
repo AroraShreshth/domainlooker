@@ -4,7 +4,7 @@ A fast command-line suite **and MCP server** for inspecting domains — WHOIS, D
 
 Every lookup runs in parallel, WHOIS uses RDAP (HTTP/JSON) first with a port-43 fallback, and timeouts are tight, so a full report typically lands in ~1–2 seconds.
 
-**[Documentation](https://arorashreshth.github.io/domainlooker/)** · [npm](https://www.npmjs.com/package/domainlooker) · [GitHub](https://github.com/AroraShreshth/domainlooker)
+**[Documentation](https://domainlooker.shreshtharora.com)** · [npm](https://www.npmjs.com/package/domainlooker) · [GitHub](https://github.com/AroraShreshth/domainlooker)
 
 [![npm version](https://badge.fury.io/js/domainlooker.svg)](https://www.npmjs.com/package/domainlooker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
