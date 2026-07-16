@@ -12,10 +12,11 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "watch": "tsc --watch",
-    "test": "jest",
+    "test": "npm run build && jest && vitest run",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:core": "jest tests/unit/basic-functionality.test.ts tests/unit/dns-simple.test.ts",
+    "test:mcp": "npm run build && vitest run",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm run test:core"
   },
@@ -35,7 +36,8 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.4.1",
     "tsx": "^4.6.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.7"
   },
   "keywords": [
     "domain",

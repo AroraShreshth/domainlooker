@@ -29,8 +29,9 @@ Thank you for your interest in contributing to DOMAINLOOKER! We welcome contribu
 ```bash
 npm run build       # Compile TypeScript
 npm run dev         # Run in development mode
-npm run test        # Run all tests
+npm run test        # Run all tests (Jest units/integration + Vitest MCP tests)
 npm run test:core   # Run core functionality tests
+npm run test:mcp    # Run only the MCP server tests (Vitest, in-memory + stdio)
 npm run test:watch  # Run tests in watch mode
 npm run typecheck   # Type checking
 ```

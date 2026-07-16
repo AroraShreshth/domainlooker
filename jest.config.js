@@ -7,6 +7,9 @@ export default {
     '**/__tests__/**/*.ts',
     '**/?(*.)+(spec|test).ts'
   ],
+  // The MCP tests import the ESM MCP SDK, which Jest's CJS runtime cannot load;
+  // they run under Vitest instead (see vitest.config.ts / `npm run test:mcp`).
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/tests/mcp/'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { useESM: true }],
   },

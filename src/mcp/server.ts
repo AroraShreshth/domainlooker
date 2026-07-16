@@ -16,6 +16,16 @@ interface CacheEntry {
   value: DomainAnalysisData;
 }
 
+/** The subset of DomainCollector the server uses — injectable so tests can supply a fake (no network). */
+export type CollectorLike = Pick<DomainCollector, 'collect' | 'whois' | 'dns' | 'ssl' | 'ports' | 'subdomains'>;
+
+export interface ServerDeps {
+  /** Data gatherer (defaults to a real DomainCollector). */
+  collector?: CollectorLike;
+  /** Target guard (defaults to assertPublicDomain); throws to block a target. */
+  assertTarget?: (domain: string) => Promise<void>;
+}
+
 /** Transform a raw DomainInfo into the structured export schema (same shape as --export-json). */
 function toAnalysis(info: DomainInfo, options: CollectOptions): DomainAnalysisData {
   const exporter = new JsonExportService({ quick: options.quick, subdomains: options.subdomains });
@@ -40,8 +50,9 @@ function guardError(error: unknown) {
   };
 }
 
-export function createServer(): McpServer {
-  const collector = new DomainCollector();
+export function createServer(deps: ServerDeps = {}): McpServer {
+  const collector = deps.collector ?? new DomainCollector();
+  const assertTarget = deps.assertTarget ?? assertPublicDomain;
   const cache = new Map<string, CacheEntry>();
 
   const cacheWrite = (key: string, value: DomainAnalysisData): void => {
@@ -80,7 +91,7 @@ export function createServer(): McpServer {
     },
     async ({ domain, includePorts, includeSubdomains }) => {
       try {
-        await assertPublicDomain(domain);
+        await assertTarget(domain);
       } catch (error) {
         return guardError(error);
       }
@@ -114,7 +125,7 @@ export function createServer(): McpServer {
   ) => {
     server.registerTool(name, { title, description, inputSchema: { domain: domainArg } }, async ({ domain }) => {
       try {
-        await assertPublicDomain(domain);
+        await assertTarget(domain);
       } catch (error) {
         return guardError(error);
       }
