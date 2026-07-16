@@ -13,7 +13,7 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [16.x, 18.x, 20.x]
+        node-version: [18.x, 20.x, 22.x]
     
     steps:
     - name: Checkout code
@@ -39,14 +39,17 @@ jobs:
       
     - name: Run core tests
       run: npm run test:core
-      
+
+    - name: Run MCP server tests (Vitest, hermetic)
+      run: npx vitest run
+
     - name: Test CLI functionality
       run: |
         # Test basic CLI commands
         node dist/index.js --version
         node dist/index.js --help
         # Test actual domain analysis (quick mode to avoid timeouts)
-        timeout 30s node dist/index.js example.com --quick --no-banner || true
+        timeout 30s node dist/index.js example.com --quick || true
 
   security:
     name: Security Audit

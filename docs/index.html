@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>domainlooker — fast domain inspection CLI & MCP server</title>
+<meta name="description" content="A fast CLI and MCP server for inspecting domains: WHOIS/RDAP, DNS, SSL, ports, and subdomains, with CSV/JSON export.">
+</head>
+<body>
+<style>
+  :root {
+    --bg: #F4F6F7;
+    --panel: #FFFFFF;
+    --panel-2: #FBFCFC;
+    --ink: #11181F;
+    --muted: #58656F;
+    --faint: #85939E;
+    --line: #E1E7EA;
+    --accent: #0B6E7F;
+    --accent-ink: #084c58;
+    --accent-soft: #E2F1F3;
+    --ok: #2B8A3E;
+    --warn: #C4661A;
+    --crit: #C92A2A;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 900px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0C1116;
+      --panel: #131C24;
+      --panel-2: #0F1720;
+      --ink: #E6ECF1;
+      --muted: #93A2AE;
+      --faint: #6A7A87;
+      --line: #223039;
+      --accent: #33C0D0;
+      --accent-ink: #7FE0EA;
+      --accent-soft: #0E2E36;
+      --ok: #51CF66;
+      --warn: #FFA94D;
+      --crit: #FF6B6B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0C1116; --panel: #131C24; --panel-2: #0F1720; --ink: #E6ECF1;
+    --muted: #93A2AE; --faint: #6A7A87; --line: #223039; --accent: #33C0D0;
+    --accent-ink: #7FE0EA; --accent-soft: #0E2E36; --ok: #51CF66; --warn: #FFA94D; --crit: #FF6B6B;
+  }
+  :root[data-theme="light"] {
+    --bg: #F4F6F7; --panel: #FFFFFF; --panel-2: #FBFCFC; --ink: #11181F;
+    --muted: #58656F; --faint: #85939E; --line: #E1E7EA; --accent: #0B6E7F;
+    --accent-ink: #084c58; --accent-soft: #E2F1F3; --ok: #2B8A3E; --warn: #C4661A; --crit: #C92A2A;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before {
+    content: ""; width: 22px; height: 1px; background: var(--accent); opacity: 0.6;
+  }
+
+  /* ---- header ---- */
+  header { border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px; max-width: var(--maxw); margin: 0 auto;
+  }
+  .brand { font-family: var(--mono); font-weight: 600; letter-spacing: -0.02em; font-size: 15px; }
+  .brand .sigil { color: var(--accent); }
+  .navlinks { display: flex; gap: 20px; font-family: var(--mono); font-size: 13px; }
+  .navlinks a { color: var(--muted); }
+  .navlinks a:hover { color: var(--ink); text-decoration: none; }
+
+  .hero { padding: 72px 0 40px; }
+  h1 {
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+    font-weight: 640;
+  }
+  h1 .prompt { font-family: var(--mono); color: var(--accent); font-weight: 500; }
+  .lede { font-size: clamp(17px, 2.4vw, 20px); color: var(--muted); max-width: 62ch; margin: 0 0 28px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .install {
+    font-family: var(--mono); font-size: 14px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px;
+    display: inline-flex; align-items: center; gap: 12px; color: var(--ink);
+  }
+  .install .c { color: var(--faint); }
+  .btn {
+    font-family: var(--mono); font-size: 13px; padding: 12px 18px; border-radius: 6px;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 500;
+  }
+  .btn:hover { text-decoration: none; filter: brightness(1.06); }
+  .btn.ghost { background: transparent; color: var(--accent); }
+
+  /* ---- terminal ---- */
+  .terminal {
+    margin: 40px 0 8px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    background: var(--panel); box-shadow: 0 1px 0 var(--line);
+  }
+  .term-head {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border-bottom: 1px solid var(--line); background: var(--panel-2);
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .term-title { margin-left: 6px; }
+  .term-body {
+    font-family: var(--mono); font-size: 13px; line-height: 1.7; padding: 18px 20px;
+    overflow-x: auto; white-space: pre; color: var(--ink);
+  }
+  .term-body .cmd { color: var(--accent-ink); }
+  .term-body .k { color: var(--muted); }
+  .term-body .ok { color: var(--ok); }
+  .term-body .hd { color: var(--accent); font-weight: 600; }
+  .term-body .dim { color: var(--faint); }
+
+  /* ---- sections ---- */
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  section h2 { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 620; }
+  section p.intro { color: var(--muted); max-width: 64ch; margin: 0 0 28px; }
+
+  .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .table-scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); background: var(--panel-2); font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  td code, .cmdname { font-family: var(--mono); font-size: 13px; color: var(--accent-ink); white-space: nowrap; }
+  td .desc { color: var(--ink); }
+  tbody tr:hover td { background: var(--panel-2); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .cell { background: var(--panel); padding: 20px; }
+  .cell .lbl { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-bottom: 8px; }
+  .cell .big { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .cell .sm { font-size: 13.5px; color: var(--muted); }
+
+  pre.code {
+    font-family: var(--mono); font-size: 13px; line-height: 1.65; margin: 0;
+    padding: 18px 20px; overflow-x: auto; color: var(--ink); background: var(--panel-2);
+  }
+  pre.code .p { color: var(--accent-ink); }
+  pre.code .s { color: var(--warn); }
+  pre.code .cm { color: var(--faint); }
+
+  .note {
+    display: flex; gap: 12px; padding: 16px 18px; border-radius: 8px;
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    font-size: 14px; color: var(--ink); margin-top: 20px;
+  }
+  .note .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); white-space: nowrap; padding-top: 2px; }
+
+  .speed-line { display: flex; align-items: baseline; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .speed-line:last-child { border-bottom: none; }
+  .speed-line .n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 22px; color: var(--accent-ink); min-width: 92px; font-weight: 600; }
+  .speed-line .t { color: var(--muted); font-size: 14.5px; }
+  .speed-line .t b { color: var(--ink); font-weight: 600; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 56px; color: var(--muted); font-size: 13px; }
+  footer .frow { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: center; }
+  footer .flinks { display: flex; gap: 18px; font-family: var(--mono); }
+
+  @media (max-width: 560px) {
+    .navlinks { display: none; }
+    .hero { padding: 48px 0 24px; }
+    .speed-line { flex-direction: column; gap: 2px; }
+  }
+</style>
+
+<header>
+  <div class="topbar">
+    <div class="brand"><span class="sigil">$</span> domainlooker</div>
+    <nav class="navlinks">
+      <a href="#commands">Commands</a>
+      <a href="#mcp">MCP</a>
+      <a href="#speed">Speed</a>
+      <a href="https://github.com/AroraShreshth/domainlooker">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <h1><span class="prompt">$</span> Inspect any domain,<br>in about a second.</h1>
+    <p class="lede">A fast command-line suite <em>and</em> MCP server for pulling everything about a domain — registration, DNS, TLS, open ports, and subdomains — as clean tables or structured JSON.</p>
+    <div class="cta-row">
+      <span class="install"><span class="c">npm i -g</span> domainlooker</span>
+      <a class="btn" href="#commands">Get started</a>
+      <a class="btn ghost" href="https://www.npmjs.com/package/domainlooker">npm →</a>
+    </div>
+
+    <div class="terminal" role="img" aria-label="Terminal showing a domainlooker report for cloudflare.com">
+      <div class="term-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">domainlooker cloudflare.com --quick</span></div>
+<div class="term-body"><span class="cmd">$ domainlooker cloudflare.com --quick</span>
+
+<span class="hd">Report: cloudflare.com</span>
+<span class="hd">Registration (WHOIS)</span>
+  <span class="k">Registrar</span>     Cloudflare, Inc.
+  <span class="k">Registered</span>    2009-02-17
+  <span class="k">Expires</span>       2033-02-17
+<span class="hd">SSL certificate</span>
+  <span class="k">Issuer</span>        Google Trust Services
+  <span class="k">Days left</span>     84
+<span class="hd">Advisories</span>
+  <span class="ok">No issues found.</span>
+<span class="dim">✔ Inspected cloudflare.com in 0.96s</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section id="commands">
+    <p class="eyebrow">Command line</p>
+    <h2>One tool, six views</h2>
+    <p class="intro">Run the full report with the bare command, or reach for a single-aspect subcommand when you only need one thing. Add <code>--export-json</code> or <code>--export-csv</code> to any inspect.</p>
+    <div class="panel table-scroll">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><span class="cmdname">domainlooker &lt;domain&gt;</span></td><td class="desc">Full report — WHOIS, DNS, SSL, ports, and advisories</td></tr>
+          <tr><td><span class="cmdname">whois &lt;domain&gt;</span></td><td class="desc">Registration data via RDAP, with a port-43 WHOIS fallback</td></tr>
+          <tr><td><span class="cmdname">dns &lt;domain&gt;</span></td><td class="desc">A, AAAA, MX, NS, TXT, and SOA records</td></tr>
+          <tr><td><span class="cmdname">ssl &lt;domain&gt;</span></td><td class="desc">Certificate details and days until expiry</td></tr>
+          <tr><td><span class="cmdname">ports &lt;domain&gt;</span></td><td class="desc">Scan common TCP ports and identify services</td></tr>
+          <tr><td><span class="cmdname">subdomains &lt;domain&gt;</span></td><td class="desc">Discover subdomains via certificate transparency + common names</td></tr>
+          <tr><td><span class="cmdname">mcp</span></td><td class="desc">Run as an MCP server over stdio (below)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <span class="tag">Try</span>
+      <div><code>domainlooker google.com github.com --subdomains --export-json report.json</code> — inspects both domains in parallel and writes a structured document.</div>
+    </div>
+  </section>
+
+  <section id="mcp">
+    <p class="eyebrow">For AI agents</p>
+    <h2>An MCP server, built in</h2>
+    <p class="intro">Point any MCP client at <code>domainlooker mcp</code> and your agent can pull domain intelligence directly. <code>inspect_domain</code> results are cached for a few minutes, so repeat calls come back in milliseconds.</p>
+    <div class="panel"><pre class="code"><span class="cm">// add to your MCP client config</span>
+{
+  <span class="p">"mcpServers"</span>: {
+    <span class="p">"domainlooker"</span>: {
+      <span class="p">"command"</span>: <span class="s">"domainlooker"</span>,
+      <span class="p">"args"</span>: [<span class="s">"mcp"</span>]
+    }
+  }
+}</pre></div>
+
+    <div style="height:20px"></div>
+    <div class="panel table-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>inspect_domain</code></td><td class="desc">Everything about a domain in one structured object (opt into ports/subdomains)</td></tr>
+          <tr><td><code>whois_lookup</code></td><td class="desc">Registrar, dates, name servers, status</td></tr>
+          <tr><td><code>dns_records</code></td><td class="desc">All DNS record types</td></tr>
+          <tr><td><code>ssl_certificate</code></td><td class="desc">TLS certificate and expiry</td></tr>
+          <tr><td><code>scan_ports</code></td><td class="desc">Open ports and identified services</td></tr>
+          <tr><td><code>find_subdomains</code></td><td class="desc">Discovered subdomains and their sources</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <span class="tag">Safe by default</span>
+      <div>Every MCP tool refuses IP literals and any host that resolves to a private, loopback, or link-local address — so an agent can't turn the server into an internal-network scanner.</div>
+    </div>
+  </section>
+
+  <section id="speed">
+    <p class="eyebrow">Performance</p>
+    <h2>Fast on purpose</h2>
+    <p class="intro">Every lookup runs in parallel, WHOIS uses RDAP (HTTP/JSON) before falling back to port-43, and timeouts are tight. The full report is bounded by its slowest single lookup, not their sum.</p>
+    <div class="panel" style="padding: 8px 20px;">
+      <div class="speed-line"><span class="n">~1–2s</span><span class="t"><b>Full report</b> — WHOIS, DNS, SSL, and a port scan, in parallel</span></div>
+      <div class="speed-line"><span class="n">~0.9s</span><span class="t"><b>Quick mode</b> — registration, DNS, and TLS with the scan skipped</span></div>
+      <div class="speed-line"><span class="n">~2ms</span><span class="t"><b>Cached</b> — a repeat <code>inspect_domain</code> over MCP</span></div>
+    </div>
+  </section>
+
+  <section id="output">
+    <p class="eyebrow">Structured output</p>
+    <h2>Tables for you, JSON for everything else</h2>
+    <p class="intro">The CLI prints clean tables; <code>--export-json</code> writes a versioned schema with per-source status, a DNS summary, certificate validation, and rule-based advisories — ready to feed into automation.</p>
+    <div class="panel"><pre class="code">{
+  <span class="p">"domain"</span>: <span class="s">"github.com"</span>,
+  <span class="p">"status"</span>: <span class="s">"success"</span>,
+  <span class="p">"whois"</span>:  { <span class="p">"status"</span>: <span class="s">"success"</span>, <span class="p">"data"</span>: { <span class="p">"registrar"</span>: <span class="s">"MarkMonitor Inc."</span> } },
+  <span class="p">"dns"</span>:    { <span class="p">"status"</span>: <span class="s">"success"</span>, <span class="p">"data"</span>: { <span class="cm">/* records + summary */</span> } },
+  <span class="p">"ssl"</span>:    { <span class="p">"status"</span>: <span class="s">"success"</span>, <span class="p">"data"</span>: { <span class="p">"validation"</span>: { <span class="p">"daysUntilExpiry"</span>: 78 } } },
+  <span class="p">"threatAssessment"</span>: { <span class="p">"overallRisk"</span>: <span class="s">"low"</span> }
+}</pre></div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap frow">
+    <div>domainlooker · MIT licensed · built for the terminal and for agents</div>
+    <div class="flinks">
+      <a href="https://github.com/AroraShreshth/domainlooker">GitHub</a>
+      <a href="https://www.npmjs.com/package/domainlooker">npm</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
